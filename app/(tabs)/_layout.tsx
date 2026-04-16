@@ -78,6 +78,24 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="heritage-directory"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="museum-directory"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="scenic-search"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

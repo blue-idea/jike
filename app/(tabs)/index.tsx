@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
   TouchableOpacity, StatusBar,
 } from 'react-native';
+import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { FEATURED_SITES, NEARBY_SITES } from '@/constants/MockData';
@@ -15,6 +16,22 @@ import { Bell, MapPin, Sparkles, Mic } from 'lucide-react-native';
 
 export default function HomeScreen() {
   const [location] = useState('北京市 · 东城区');
+
+  const handleCategorySelect = (id: string) => {
+    if (id === 'heritage') {
+      router.push('/heritage-directory');
+      return;
+    }
+
+    if (id === 'museum') {
+      router.push('/museum-directory');
+      return;
+    }
+
+    if (id === 'scenic') {
+      router.push('/scenic-search');
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -64,7 +81,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <CategoryFilter />
+          <CategoryFilter onSelect={handleCategorySelect} />
         </View>
 
         <View style={styles.section}>
