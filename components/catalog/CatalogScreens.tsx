@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import {
   HERITAGE_DYNASTIES,
@@ -24,11 +25,11 @@ import {
   SCENIC_MAP_IMAGE,
 } from '@/constants/CatalogData';
 import {
+  ArrowLeft,
   ArrowRight,
   ChevronDown,
   Landmark,
   MapPin,
-  Menu,
   Search,
   SlidersHorizontal,
   Star,
@@ -36,12 +37,13 @@ import {
 } from 'lucide-react-native';
 
 function TopBar({ title }: { title: string }) {
+  const router = useRouter();
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.85}>
-            <Menu size={20} color={stylesVars.heritagePrimary} />
+          <TouchableOpacity style={styles.iconButton} activeOpacity={0.85} onPress={() => router.push('/discover')}>
+            <ArrowLeft size={20} color={stylesVars.heritagePrimary} />
           </TouchableOpacity>
           <Text style={styles.topBarTitle}>{title}</Text>
         </View>
