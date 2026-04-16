@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { JOURNEY_TEMPLATES } from '@/constants/MockData';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { CommonTopBar } from '@/components/ui/CommonTopBar';
 import {
   Plus, Route, Clock, MapPin, Sparkles,
   Navigation, Calendar, ChevronRight, Footprints,
@@ -36,16 +37,15 @@ export default function JourneyScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <Text style={styles.title}>文旅路线</Text>
-          <TouchableOpacity style={styles.createBtn}>
-            <Plus size={18} color={Colors.white} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
+      <CommonTopBar 
+        rightElement={
+          <TouchableOpacity style={styles.createBtn} activeOpacity={0.8}>
+            <Plus size={16} color={Colors.white} />
             <Text style={styles.createBtnText}>新建</Text>
           </TouchableOpacity>
-        </View>
-      </SafeAreaView>
+        }
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.activeJourney}>
@@ -213,22 +213,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  safeArea: {
-    backgroundColor: Colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 1,
   },
   createBtn: {
     flexDirection: 'row',

@@ -904,14 +904,16 @@ const styles = StyleSheet.create({
   dynastyCard: {
     width: '30.8%',
     minWidth: 104,
-    height: 132,
+    height: 90,
     backgroundColor: '#F7F3E9',
     borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 11,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(136,114,109,0.08)',
+    gap: 6,
   },
   dynastyCardActive: {
     backgroundColor: '#B25A3E',
@@ -927,6 +929,7 @@ const styles = StyleSheet.create({
     color: '#F4D5CB',
   },
   dynastyTextBlock: {
+    alignItems: 'center',
     gap: 2,
   },
   dynastyLabel: {

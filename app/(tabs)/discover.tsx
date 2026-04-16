@@ -10,6 +10,7 @@ import { FEATURED_SITES } from '@/constants/MockData';
 import { SearchBar } from '@/components/discover/SearchBar';
 import { SiteListCard } from '@/components/discover/SiteListCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { CommonTopBar } from '@/components/ui/CommonTopBar';
 import { MapPin, RefreshCw, Flame, Navigation, Landmark, Search, Map } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
@@ -69,12 +70,8 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <Text style={styles.title}>发现</Text>
-        </View>
-      </SafeAreaView>
+      <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
+      <CommonTopBar />
 
       <ScrollView
         style={styles.scroll}
@@ -264,19 +261,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  safeArea: {
-    backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: Colors.text,
-    letterSpacing: 1.5,
   },
   scroll: {
     flex: 1,

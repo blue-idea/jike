@@ -7,6 +7,7 @@ import { Colors } from '@/constants/Colors';
 import { FEATURED_SITES } from '@/constants/MockData';
 import { SiteListCard } from '@/components/discover/SiteListCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import { CommonTopBar } from '@/components/ui/CommonTopBar';
 import { Heart, Bookmark, Map, Trash2, FolderOpen } from 'lucide-react-native';
 
 const TABS = [
@@ -38,12 +39,9 @@ export default function CollectionScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <Text style={styles.title}>我的收藏</Text>
-        </View>
-
+      <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
+      <CommonTopBar />
+      <View style={styles.tabContainer}>
         <View style={styles.tabBar}>
           {TABS.map(({ id, label, Icon }) => (
             <TouchableOpacity
@@ -60,7 +58,7 @@ export default function CollectionScreen() {
             </TouchableOpacity>
           ))}
         </View>
-      </SafeAreaView>
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {items.length === 0 ? (
@@ -144,18 +142,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  safeArea: {
+  tabContainer: {
     backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 0.5,
+    paddingTop: 8,
   },
   tabBar: {
     flexDirection: 'row',
