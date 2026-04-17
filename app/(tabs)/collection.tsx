@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, SafeAreaView,
+  View, Text, ScrollView, StyleSheet,
   TouchableOpacity, StatusBar, Image,
 } from 'react-native';
 import { Colors } from '@/constants/Colors';
@@ -9,6 +9,7 @@ import { SiteListCard } from '@/components/discover/SiteListCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { CommonTopBar } from '@/components/ui/CommonTopBar';
 import { Heart, Bookmark, Map, Trash2, FolderOpen } from 'lucide-react-native';
+import { CollectionMapSection } from '@/components/collection/CollectionMapSection';
 
 const TABS = [
   { id: 'favorites', label: '收藏', Icon: Heart },
@@ -41,26 +42,27 @@ export default function CollectionScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
       <CommonTopBar />
-      <View style={styles.tabContainer}>
-        <View style={styles.tabBar}>
-          {TABS.map(({ id, label, Icon }) => (
-            <TouchableOpacity
-              key={id}
-              style={[styles.tab, activeTab === id && styles.tabActive]}
-              onPress={() => setActiveTab(id)}
-            >
-              <Icon
-                size={15}
-                color={activeTab === id ? Colors.primary : Colors.textMuted}
-                strokeWidth={activeTab === id ? 2.5 : 1.8}
-              />
-              <Text style={[styles.tabLabel, activeTab === id && styles.tabLabelActive]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        <CollectionMapSection />
+        <View style={styles.tabContainer}>
+          <View style={styles.tabBar}>
+            {TABS.map(({ id, label, Icon }) => (
+              <TouchableOpacity
+                key={id}
+                style={[styles.tab, activeTab === id && styles.tabActive]}
+                onPress={() => setActiveTab(id)}
+              >
+                <Icon
+                  size={15}
+                  color={activeTab === id ? Colors.primary : Colors.textMuted}
+                  strokeWidth={activeTab === id ? 2.5 : 1.8}
+                />
+                <Text style={[styles.tabLabel, activeTab === id && styles.tabLabelActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
         {items.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>

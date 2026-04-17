@@ -48,4 +48,4 @@ export const Gradients = {
   card: ['rgba(255,255,255,0)', 'rgba(250,247,242,1)'],
   gold: ['#DFB07A', '#C9A84C'],
   jade: ['#4A8C6F', '#2C4A3E'],
-};
+} as const;

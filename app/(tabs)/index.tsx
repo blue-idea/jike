@@ -61,23 +61,28 @@ export default function HomeScreen() {
         <HeroCarousel />
 
         <View style={styles.aiPromptSection}>
-          <LinearGradient
-            colors={[Colors.primary, Colors.primaryDark]}
-            style={styles.aiCard}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+          <TouchableOpacity 
+            onPress={() => router.push('/ai-guide-detail')}
+            activeOpacity={0.9}
           >
-            <View style={styles.aiLeft}>
-              <Sparkles size={18} color={Colors.goldLight} />
-              <View>
-                <Text style={styles.aiTitle}>AI文化向导</Text>
-                <Text style={styles.aiSubtitle}>告诉我你的偏好，智能规划专属路线</Text>
+            <LinearGradient
+              colors={[Colors.primary, Colors.primaryDark]}
+              style={styles.aiCard}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.aiLeft}>
+                <Sparkles size={18} color={Colors.goldLight} />
+                <View>
+                  <Text style={styles.aiTitle}>AI文化向导</Text>
+                  <Text style={styles.aiSubtitle}>告诉我你的偏好，智能规划专属路线</Text>
+                </View>
               </View>
-            </View>
-            <TouchableOpacity style={styles.aiMicBtn}>
-              <Mic size={16} color={Colors.primary} />
-            </TouchableOpacity>
-          </LinearGradient>
+              <View style={styles.aiMicBtn}>
+                <Mic size={16} color={Colors.primary} />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
@@ -150,7 +155,10 @@ export default function HomeScreen() {
               <Text style={styles.insightBody}>
                 唐朝是中国历史上最开放的朝代之一，玄奘西行取经、武则天崇佛等因素共同推动了佛教文化的黄金时代…
               </Text>
-              <TouchableOpacity style={styles.insightBtn}>
+              <TouchableOpacity 
+                style={styles.insightBtn}
+                onPress={() => router.push('/ai-guide-detail')}
+              >
                 <Sparkles size={14} color={Colors.accent} />
                 <Text style={styles.insightBtnText}>AI深度解析</Text>
               </TouchableOpacity>

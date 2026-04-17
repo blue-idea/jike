@@ -18,12 +18,12 @@ import {
   HERITAGE_DYNASTIES,
   HERITAGE_TYPES,
   MUSEUM_CARDS,
-  MUSEUM_PROVINCES,
   SCENIC_CATEGORY_TABS,
   SCENIC_FEATURED,
   SCENIC_FILTERS,
   SCENIC_MAP_IMAGE,
 } from '@/constants/CatalogData';
+import { GeoLocationFilter } from '@/components/catalog/GeoLocationFilter';
 import {
   ArrowLeft,
   ArrowRight,
@@ -42,7 +42,11 @@ function TopBar({ title }: { title: string }) {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
-          <TouchableOpacity style={styles.iconButton} activeOpacity={0.85} onPress={() => router.push('/discover')}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.85}
+            onPress={() => router.push('/discover')}
+          >
             <ArrowLeft size={20} color={stylesVars.heritagePrimary} />
           </TouchableOpacity>
           <Text style={styles.topBarTitle}>{title}</Text>
@@ -58,144 +62,341 @@ function TopBar({ title }: { title: string }) {
   );
 }
 
+export function ScenicSearchContent() {
+  return (
+    <>
+      <View style={styles.sectionPad}>
+        <View style={styles.searchBoxLarge}>
+          <Search size={18} color={stylesVars.scenicPrimary} />
+          <TextInput
+            editable={false}
+            placeholder="搜索古建筑、遗址、博物馆..."
+            placeholderTextColor="#8C8173"
+            style={styles.searchInput}
+          />
+        </View>
+      </View>
+
+      <View style={styles.sectionPad}>
+        <GeoLocationFilter primaryColor={stylesVars.scenicPrimary} />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.tabRow}
+      >
+        {SCENIC_CATEGORY_TABS.map((tab, index) => {
+          const active = index === 0;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={[styles.categoryTab, active && styles.categoryTabActive]}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[
+                  styles.categoryTabText,
+                  active && styles.categoryTabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      <View style={[styles.sectionPad, styles.filterCard]}>
+        <View style={styles.filterGrid}>
+          {SCENIC_FILTERS.map((filter) => (
+            <View key={filter.id} style={styles.filterBlock}>
+              <Text style={styles.filterLabel}>{filter.label}</Text>
+              <TouchableOpacity style={styles.filterValue} activeOpacity={0.85}>
+                <Text style={styles.filterValueText}>{filter.value}</Text>
+                <ChevronDown size={16} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.filterAction} activeOpacity={0.9}>
+            <SlidersHorizontal size={18} color={Colors.white} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.sectionPad}>
+        <View style={styles.sectionHeading}>
+          <View>
+            <Text style={styles.sectionTitle}>附近文化地标</Text>
+            <Text style={styles.sectionSubtitle}>
+              沿用 Stitch 稿的景点搜索结构
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.linkBtn} activeOpacity={0.85}>
+            <Text style={styles.linkBtnText}>查看全部</Text>
+            <ArrowRight size={14} color={stylesVars.scenicPrimary} />
+          </TouchableOpacity>
+        </View>
+
+        <ImageBackground
+          source={{ uri: SCENIC_FEATURED[0].image }}
+          imageStyle={styles.heroImage}
+          style={styles.heroCard}
+        >
+          <LinearGradient
+            colors={['rgba(14,71,83,0.1)', 'rgba(14,71,83,0.88)']}
+            style={styles.heroOverlay}
+          >
+            <View style={styles.heroBadgeRow}>
+              {SCENIC_FEATURED[0].tags.map((tag) => (
+                <Text key={tag} style={styles.heroBadge}>
+                  {tag}
+                </Text>
+              ))}
+              <Text style={styles.heroDistance}>
+                {SCENIC_FEATURED[0].distance}
+              </Text>
+            </View>
+            <View style={styles.heroMeta}>
+              <Text style={styles.heroTitle}>{SCENIC_FEATURED[0].title}</Text>
+              <Text style={styles.heroSubtitle}>
+                {SCENIC_FEATURED[0].subtitle}
+              </Text>
+            </View>
+          </LinearGradient>
+        </ImageBackground>
+
+        <View style={styles.cardGrid}>
+          {SCENIC_FEATURED.slice(1).map((item) => (
+            <View key={item.id} style={styles.scenicCard}>
+              <Image
+                source={{ uri: item.image }}
+                style={styles.scenicCardImage}
+              />
+              <View style={styles.distancePill}>
+                <Text style={styles.distancePillText}>{item.distance}</Text>
+              </View>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle}>{item.title}</Text>
+                <View style={styles.tagRow}>
+                  {item.tags.map((tag) => (
+                    <Text key={tag} style={styles.cardTag}>
+                      {tag}
+                    </Text>
+                  ))}
+                </View>
+                <View style={styles.cardFooter}>
+                  <View style={styles.ratingRow}>
+                    <Star
+                      size={13}
+                      color={Colors.accent}
+                      fill={Colors.accent}
+                    />
+                    <Text style={styles.ratingText}>{item.rating}</Text>
+                  </View>
+                  <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.mapPromo}>
+          <View style={styles.mapPromoText}>
+            <Text style={styles.mapPromoTitle}>遗产地图</Text>
+            <Text style={styles.mapPromoBody}>
+              探索你周边的古都脉络，每个街角都可能通往一段千年故事。
+            </Text>
+            <TouchableOpacity style={styles.mapButton} activeOpacity={0.9}>
+              <Text style={styles.mapButtonText}>探索周边</Text>
+            </TouchableOpacity>
+          </View>
+          <Image source={{ uri: SCENIC_MAP_IMAGE }} style={styles.mapPreview} />
+        </View>
+      </View>
+    </>
+  );
+}
+
 export function ScenicSearchScreen() {
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor={stylesVars.heritageBg} />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={stylesVars.heritageBg}
+      />
       <TopBar title="A级景点搜索" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.sectionPad}>
-          <View style={styles.searchBoxLarge}>
-            <Search size={18} color={stylesVars.scenicPrimary} />
-            <TextInput
-              editable={false}
-              placeholder="搜索古建筑、遗址、博物馆..."
-              placeholderTextColor="#8C8173"
-              style={styles.searchInput}
-            />
-          </View>
-        </View>
+        <ScenicSearchContent />
+      </ScrollView>
+    </View>
+  );
+}
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabRow}
-        >
-          {SCENIC_CATEGORY_TABS.map((tab, index) => {
-            const active = index === 0;
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.categoryTab, active && styles.categoryTabActive]}
-                activeOpacity={0.85}
+export function HeritageDirectoryContent() {
+  return (
+    <View style={styles.sectionPad}>
+      <GeoLocationFilter primaryColor={stylesVars.heritagePrimary} />
+
+      <View style={styles.contentSection}>
+        <View style={styles.dynastySectionHeader}>
+          <View style={styles.labelRowTight}>
+            <View style={styles.dot} />
+            <Text style={styles.contentTitle}>朝代年轮</Text>
+          </View>
+          <Text style={styles.categoryLabel}>DYNASTY</Text>
+        </View>
+        <View style={styles.dynastyGrid}>
+          {HERITAGE_DYNASTIES.map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[
+                styles.dynastyCard,
+                item.active && styles.dynastyCardActive,
+              ]}
+              activeOpacity={0.9}
+            >
+              <Text
+                style={[
+                  styles.dynastyYears,
+                  item.active && styles.dynastyYearsActive,
+                ]}
               >
-                <Text style={[styles.categoryTabText, active && styles.categoryTabTextActive]}>
-                  {tab.label}
+                {item.years}
+              </Text>
+              <View style={styles.dynastyTextBlock}>
+                <Text
+                  style={[
+                    styles.dynastyLabel,
+                    item.active && styles.dynastyLabelActive,
+                  ]}
+                >
+                  {item.label}
                 </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
-        <View style={[styles.sectionPad, styles.filterCard]}>
-          <View style={styles.filterGrid}>
-            {SCENIC_FILTERS.map((filter) => (
-              <View key={filter.id} style={styles.filterBlock}>
-                <Text style={styles.filterLabel}>{filter.label}</Text>
-                <TouchableOpacity style={styles.filterValue} activeOpacity={0.85}>
-                  <Text style={styles.filterValueText}>{filter.value}</Text>
-                  <ChevronDown size={16} color={Colors.textSecondary} />
-                </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.dynastySubtitle,
+                    item.active && styles.dynastySubtitleActive,
+                  ]}
+                >
+                  {`${item.label} DYNASTY`}
+                </Text>
               </View>
-            ))}
-            <TouchableOpacity style={styles.filterAction} activeOpacity={0.9}>
-              <SlidersHorizontal size={18} color={Colors.white} />
             </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.contentSection}>
+        <View style={styles.categorySectionHeader}>
+          <View style={styles.categoryTitleRow}>
+            <View style={styles.dot} />
+            <Text style={styles.contentTitle}>类别志趣</Text>
           </View>
+          <Text style={styles.categoryLabel}>CATEGORY</Text>
         </View>
 
-        <View style={styles.sectionPad}>
-          <View style={styles.sectionHeading}>
-            <View>
-              <Text style={styles.sectionTitle}>附近文化地标</Text>
-              <Text style={styles.sectionSubtitle}>沿用 Stitch 稿的景点搜索结构</Text>
+        <View style={styles.heritageTypeStack}>
+          <ImageBackground
+            source={{ uri: HERITAGE_TYPES[0].image }}
+            imageStyle={styles.heritageImage}
+            style={[styles.heritageTypeCard, styles.heritageWide]}
+          >
+            <LinearGradient
+              colors={['rgba(0,0,0,0.14)', 'rgba(0,0,0,0.74)']}
+              style={styles.heritageOverlay}
+            >
+              <Text style={styles.heritageTypeTitle}>
+                {HERITAGE_TYPES[0].title}
+              </Text>
+              <Text style={styles.heritageTypeSubtitle}>
+                {HERITAGE_TYPES[0].subtitle}
+              </Text>
+            </LinearGradient>
+            <View style={styles.heritageBadge}>
+              <Landmark
+                size={15}
+                color={stylesVars.heritagePrimary}
+                strokeWidth={2.2}
+              />
             </View>
-            <TouchableOpacity style={styles.linkBtn} activeOpacity={0.85}>
-              <Text style={styles.linkBtnText}>查看全部</Text>
-              <ArrowRight size={14} color={stylesVars.scenicPrimary} />
-            </TouchableOpacity>
+          </ImageBackground>
+
+          <View style={styles.heritagePairRow}>
+            {HERITAGE_TYPES.slice(1, 3).map((item) => (
+              <ImageBackground
+                key={item.id}
+                source={{ uri: item.image }}
+                imageStyle={styles.heritageImage}
+                style={[styles.heritageTypeCard, styles.heritageHalf]}
+              >
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
+                  style={styles.heritageOverlay}
+                >
+                  <Text style={styles.heritageTypeTitle}>{item.title}</Text>
+                  <Text style={styles.heritageTypeSubtitle}>
+                    {item.subtitle}
+                  </Text>
+                </LinearGradient>
+              </ImageBackground>
+            ))}
           </View>
 
           <ImageBackground
-            source={{ uri: SCENIC_FEATURED[0].image }}
-            imageStyle={styles.heroImage}
-            style={styles.heroCard}
+            source={{ uri: HERITAGE_TYPES[3].image }}
+            imageStyle={styles.heritageImage}
+            style={[styles.heritageTypeCard, styles.heritageWide]}
           >
             <LinearGradient
-              colors={['rgba(14,71,83,0.1)', 'rgba(14,71,83,0.88)']}
-              style={styles.heroOverlay}
+              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.68)']}
+              style={styles.heritageOverlay}
             >
-              <View style={styles.heroBadgeRow}>
-                {SCENIC_FEATURED[0].tags.map((tag) => (
-                  <Text key={tag} style={styles.heroBadge}>
-                    {tag}
-                  </Text>
-                ))}
-                <Text style={styles.heroDistance}>{SCENIC_FEATURED[0].distance}</Text>
-              </View>
-              <View style={styles.heroMeta}>
-                <Text style={styles.heroTitle}>{SCENIC_FEATURED[0].title}</Text>
-                <Text style={styles.heroSubtitle}>{SCENIC_FEATURED[0].subtitle}</Text>
-              </View>
-            </LinearGradient>
-          </ImageBackground>
-
-          <View style={styles.cardGrid}>
-            {SCENIC_FEATURED.slice(1).map((item) => (
-              <View key={item.id} style={styles.scenicCard}>
-                <Image source={{ uri: item.image }} style={styles.scenicCardImage} />
-                <View style={styles.distancePill}>
-                  <Text style={styles.distancePillText}>{item.distance}</Text>
-                </View>
-                <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <View style={styles.tagRow}>
-                    {item.tags.map((tag) => (
-                      <Text key={tag} style={styles.cardTag}>
-                        {tag}
-                      </Text>
-                    ))}
-                  </View>
-                  <View style={styles.cardFooter}>
-                    <View style={styles.ratingRow}>
-                      <Star size={13} color={Colors.accent} fill={Colors.accent} />
-                      <Text style={styles.ratingText}>{item.rating}</Text>
-                    </View>
-                    <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.mapPromo}>
-            <View style={styles.mapPromoText}>
-              <Text style={styles.mapPromoTitle}>遗产地图</Text>
-              <Text style={styles.mapPromoBody}>
-                探索你周边的古都脉络，每个街角都可能通往一段千年故事。
+              <Text style={styles.heritageTypeTitle}>
+                {HERITAGE_TYPES[3].title}
               </Text>
-              <TouchableOpacity style={styles.mapButton} activeOpacity={0.9}>
-                <Text style={styles.mapButtonText}>探索周边</Text>
-              </TouchableOpacity>
+              <Text style={styles.heritageTypeSubtitle}>
+                {HERITAGE_TYPES[3].subtitle}
+              </Text>
+            </LinearGradient>
+            <View style={styles.heritageBadge}>
+              <Swords
+                size={15}
+                color={stylesVars.heritagePrimary}
+                strokeWidth={2.1}
+              />
             </View>
-            <Image source={{ uri: SCENIC_MAP_IMAGE }} style={styles.mapPreview} />
+          </ImageBackground>
+        </View>
+      </View>
+
+      <View style={styles.contentSection}>
+        <View style={styles.sliderHeader}>
+          <View style={styles.labelRow}>
+            <View style={styles.dot} />
+            <Text style={styles.contentTitle}>足迹范围</Text>
+          </View>
+          <View style={styles.sliderValue}>
+            <Text style={styles.sliderValueText}>50 KM</Text>
           </View>
         </View>
-      </ScrollView>
+        <View style={styles.sliderTrack}>
+          <View style={styles.sliderActive} />
+          <View style={styles.sliderThumb} />
+        </View>
+        <View style={styles.sliderLabels}>
+          <Text style={styles.sliderLabelText}>Nearby</Text>
+          <Text style={styles.sliderLabelText}>Faraway</Text>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.primaryCTA} activeOpacity={0.92}>
+        <Text style={styles.primaryCTAText}>开启寻迹之旅</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -203,156 +404,123 @@ export function ScenicSearchScreen() {
 export function HeritageDirectoryScreen() {
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor={stylesVars.heritageBg} />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={stylesVars.heritageBg}
+      />
       <TopBar title="重点文保名录" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.sectionPad}>
-          <View style={styles.editorialHeader}>
-            <View style={styles.editorialHeroRow}>
-              <Text style={styles.editorialMarkVertical}>筛选中心</Text>
-              <View style={styles.editorialHeroText}>
-                <Text style={styles.editorialTitle}>多维探寻</Text>
-                <Text style={styles.editorialBody}>
-                  拨动时光的指针，在层叠的历史皱褶中，定位那一抹属于你的文明印记。
-                </Text>
-              </View>
-            </View>
-          </View>
+        <HeritageDirectoryContent />
+      </ScrollView>
+    </View>
+  );
+}
 
-          <View style={styles.contentSection}>
-            <View style={styles.dynastySectionHeader}>
-              <View style={styles.labelRowTight}>
-                <View style={styles.dot} />
-                <Text style={styles.contentTitle}>朝代年轮</Text>
-              </View>
-              <Text style={styles.categoryLabel}>DYNASTY</Text>
-            </View>
-            <View style={styles.dynastyGrid}>
-              {HERITAGE_DYNASTIES.map((item) => (
-                <TouchableOpacity
-                  key={item.label}
-                  style={[styles.dynastyCard, item.active && styles.dynastyCardActive]}
-                  activeOpacity={0.9}
+export function MuseumDirectoryContent() {
+  return (
+    <View style={styles.sectionPad}>
+      <View style={styles.searchBox}>
+        <Search size={18} color={stylesVars.heritagePrimary} />
+        <TextInput
+          editable={false}
+          placeholder="搜索博物馆..."
+          placeholderTextColor="#8C8173"
+          style={styles.searchInput}
+        />
+      </View>
+
+      <GeoLocationFilter primaryColor={stylesVars.heritagePrimary} />
+
+      <View style={styles.museumFilterGrid}>
+        <View style={styles.museumFilterCard}>
+          <Text style={styles.museumFilterLabel}>质量等级</Text>
+          <View style={styles.tagRow}>
+            {['一级', '二级', '三级', '无级别'].map((tag, index) => (
+              <Text
+                key={tag}
+                style={[
+                  styles.museumFilterTag,
+                  index === 0 && styles.museumFilterTagActive,
+                ]}
+              >
+                {tag}
+              </Text>
+            ))}
+          </View>
+        </View>
+        <View style={styles.museumFilterCard}>
+          <Text style={styles.museumFilterLabel}>博物馆性质</Text>
+          <View style={styles.tagRow}>
+            {['综合', '历史', '艺术', '科技'].map((tag) => (
+              <Text key={tag} style={styles.museumFilterTag}>
+                {tag}
+              </Text>
+            ))}
+          </View>
+        </View>
+        <View style={styles.museumSwitchCard}>
+          <View>
+            <Text style={styles.museumFilterLabel}>开放政策</Text>
+            <Text style={styles.switchText}>仅显示免费开放</Text>
+          </View>
+          <View style={styles.switchTrack}>
+            <View style={styles.switchThumb} />
+          </View>
+        </View>
+        <View style={styles.museumSwitchCard}>
+          <View>
+            <Text style={styles.museumFilterLabel}>排序方式</Text>
+            <Text style={styles.switchText}>离我最近</Text>
+          </View>
+          <ChevronDown size={18} color={stylesVars.heritagePrimary} />
+        </View>
+      </View>
+
+      <View style={styles.museumList}>
+        {MUSEUM_CARDS.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            style={styles.museumCard}
+            activeOpacity={0.92}
+          >
+            <Image source={{ uri: item.image }} style={styles.museumImage} />
+            <View style={styles.museumTagRow}>
+              {item.tags.map((tag, index) => (
+                <Text
+                  key={tag}
+                  style={[
+                    styles.museumImageTag,
+                    index === 1 && styles.museumImageTagLight,
+                  ]}
                 >
-                  <Text
-                    style={[styles.dynastyYears, item.active && styles.dynastyYearsActive]}
-                  >
-                    {item.years}
-                  </Text>
-                  <View style={styles.dynastyTextBlock}>
-                    <Text
-                      style={[styles.dynastyLabel, item.active && styles.dynastyLabelActive]}
-                    >
-                      {item.label}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.dynastySubtitle,
-                        item.active && styles.dynastySubtitleActive,
-                      ]}
-                    >
-                      {`${item.label} DYNASTY`}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                  {tag}
+                </Text>
               ))}
             </View>
-          </View>
-
-          <View style={styles.contentSection}>
-            <View style={styles.categorySectionHeader}>
-              <View style={styles.categoryTitleRow}>
-                <View style={styles.dot} />
-                <Text style={styles.contentTitle}>类别志趣</Text>
-              </View>
-              <Text style={styles.categoryLabel}>CATEGORY</Text>
-            </View>
-
-            <View style={styles.heritageTypeStack}>
-              <ImageBackground
-                source={{ uri: HERITAGE_TYPES[0].image }}
-                imageStyle={styles.heritageImage}
-                style={[styles.heritageTypeCard, styles.heritageWide]}
-              >
-                <LinearGradient
-                  colors={['rgba(0,0,0,0.14)', 'rgba(0,0,0,0.74)']}
-                  style={styles.heritageOverlay}
-                >
-                  <Text style={styles.heritageTypeTitle}>{HERITAGE_TYPES[0].title}</Text>
-                  <Text style={styles.heritageTypeSubtitle}>{HERITAGE_TYPES[0].subtitle}</Text>
-                </LinearGradient>
-                <View style={styles.heritageBadge}>
-                  <Landmark size={15} color={stylesVars.heritagePrimary} strokeWidth={2.2} />
+            <View style={styles.museumCardBody}>
+              <View>
+                <Text style={styles.museumTitle}>{item.title}</Text>
+                <View style={styles.locationRow}>
+                  <MapPin size={12} color={Colors.textMuted} />
+                  <Text style={styles.locationText}>{item.location}</Text>
                 </View>
-              </ImageBackground>
-
-              <View style={styles.heritagePairRow}>
-                {HERITAGE_TYPES.slice(1, 3).map((item) => (
-                  <ImageBackground
-                    key={item.id}
-                    source={{ uri: item.image }}
-                    imageStyle={styles.heritageImage}
-                    style={[styles.heritageTypeCard, styles.heritageHalf]}
-                  >
-                    <LinearGradient
-                      colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
-                      style={styles.heritageOverlay}
-                    >
-                      <Text style={styles.heritageTypeTitle}>{item.title}</Text>
-                      <Text style={styles.heritageTypeSubtitle}>{item.subtitle}</Text>
-                    </LinearGradient>
-                  </ImageBackground>
-                ))}
               </View>
-
-              <ImageBackground
-                source={{ uri: HERITAGE_TYPES[3].image }}
-                imageStyle={styles.heritageImage}
-                style={[styles.heritageTypeCard, styles.heritageWide]}
-              >
-                <LinearGradient
-                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.68)']}
-                  style={styles.heritageOverlay}
-                >
-                  <Text style={styles.heritageTypeTitle}>{HERITAGE_TYPES[3].title}</Text>
-                  <Text style={styles.heritageTypeSubtitle}>{HERITAGE_TYPES[3].subtitle}</Text>
-                </LinearGradient>
-                <View style={styles.heritageBadge}>
-                  <Swords size={15} color={stylesVars.heritagePrimary} strokeWidth={2.1} />
-                </View>
-              </ImageBackground>
+              <Text style={styles.museumDistance}>{item.distance}</Text>
             </View>
-          </View>
-
-          <View style={styles.contentSection}>
-            <View style={styles.sliderHeader}>
-              <View style={styles.labelRow}>
-                <View style={styles.dot} />
-                <Text style={styles.contentTitle}>足迹范围</Text>
-              </View>
-              <View style={styles.sliderValue}>
-                <Text style={styles.sliderValueText}>50 KM</Text>
-              </View>
-            </View>
-            <View style={styles.sliderTrack}>
-              <View style={styles.sliderActive} />
-              <View style={styles.sliderThumb} />
-            </View>
-            <View style={styles.sliderLabels}>
-              <Text style={styles.sliderLabelText}>Nearby</Text>
-              <Text style={styles.sliderLabelText}>Faraway</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.primaryCTA} activeOpacity={0.92}>
-            <Text style={styles.primaryCTAText}>开启寻迹之旅</Text>
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+        ))}
+      </View>
+
+      <View style={styles.loadMoreArea}>
+        <TouchableOpacity style={styles.loadMoreButton} activeOpacity={0.9}>
+          <Text style={styles.loadMoreText}>加载更多博物馆</Text>
+        </TouchableOpacity>
+        <Text style={styles.loadMoreHint}>已显示 5/5600+ 所博物馆</Text>
+      </View>
     </View>
   );
 }
@@ -360,118 +528,17 @@ export function HeritageDirectoryScreen() {
 export function MuseumDirectoryScreen() {
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor={stylesVars.heritageBg} />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={stylesVars.heritageBg}
+      />
       <TopBar title="博物馆名录" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.sectionPad}>
-          <View style={styles.searchBox}>
-            <Search size={18} color={stylesVars.heritagePrimary} />
-            <TextInput
-              editable={false}
-              placeholder="搜索博物馆..."
-              placeholderTextColor="#8C8173"
-              style={styles.searchInput}
-            />
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.provinceRow}
-          >
-            {MUSEUM_PROVINCES.map((province, index) => (
-              <TouchableOpacity
-                key={province}
-                style={[styles.provinceChip, index === 0 && styles.provinceChipActive]}
-                activeOpacity={0.85}
-              >
-                <Text
-                  style={[
-                    styles.provinceChipText,
-                    index === 0 && styles.provinceChipTextActive,
-                  ]}
-                >
-                  {province}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <View style={styles.museumFilterGrid}>
-            <View style={styles.museumFilterCard}>
-              <Text style={styles.museumFilterLabel}>质量等级</Text>
-              <View style={styles.tagRow}>
-                {['一级', '二级', '三级', '无级别'].map((tag, index) => (
-                  <Text key={tag} style={[styles.museumFilterTag, index === 0 && styles.museumFilterTagActive]}>
-                    {tag}
-                  </Text>
-                ))}
-              </View>
-            </View>
-            <View style={styles.museumFilterCard}>
-              <Text style={styles.museumFilterLabel}>博物馆性质</Text>
-              <View style={styles.tagRow}>
-                {['综合', '历史', '艺术', '科技'].map((tag) => (
-                  <Text key={tag} style={styles.museumFilterTag}>
-                    {tag}
-                  </Text>
-                ))}
-              </View>
-            </View>
-            <View style={styles.museumSwitchCard}>
-              <View>
-                <Text style={styles.museumFilterLabel}>开放政策</Text>
-                <Text style={styles.switchText}>仅显示免费开放</Text>
-              </View>
-              <View style={styles.switchTrack}>
-                <View style={styles.switchThumb} />
-              </View>
-            </View>
-            <View style={styles.museumSwitchCard}>
-              <View>
-                <Text style={styles.museumFilterLabel}>排序方式</Text>
-                <Text style={styles.switchText}>离我最近</Text>
-              </View>
-              <ChevronDown size={18} color={stylesVars.heritagePrimary} />
-            </View>
-          </View>
-
-          <View style={styles.museumList}>
-            {MUSEUM_CARDS.map((item) => (
-              <TouchableOpacity key={item.id} style={styles.museumCard} activeOpacity={0.92}>
-                <Image source={{ uri: item.image }} style={styles.museumImage} />
-                <View style={styles.museumTagRow}>
-                  {item.tags.map((tag, index) => (
-                    <Text key={tag} style={[styles.museumImageTag, index === 1 && styles.museumImageTagLight]}>
-                      {tag}
-                    </Text>
-                  ))}
-                </View>
-                <View style={styles.museumCardBody}>
-                  <View>
-                    <Text style={styles.museumTitle}>{item.title}</Text>
-                    <View style={styles.locationRow}>
-                      <MapPin size={12} color={Colors.textMuted} />
-                      <Text style={styles.locationText}>{item.location}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.museumDistance}>{item.distance}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.loadMoreArea}>
-            <TouchableOpacity style={styles.loadMoreButton} activeOpacity={0.9}>
-              <Text style={styles.loadMoreText}>加载更多博物馆</Text>
-            </TouchableOpacity>
-            <Text style={styles.loadMoreHint}>已显示 5/5600+ 所博物馆</Text>
-          </View>
-        </View>
+        <MuseumDirectoryContent />
       </ScrollView>
     </View>
   );
@@ -899,29 +966,29 @@ const styles = StyleSheet.create({
   dynastyGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   dynastyCard: {
     width: '30.8%',
-    minWidth: 104,
-    height: 90,
+    minWidth: 83,
+    height: 72,
     backgroundColor: '#F7F3E9',
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(136,114,109,0.08)',
-    gap: 6,
+    gap: 5,
   },
   dynastyCardActive: {
     backgroundColor: '#B25A3E',
     borderColor: '#B25A3E',
   },
   dynastyYears: {
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: 8,
+    lineHeight: 13,
     color: Colors.textMuted,
     fontWeight: '700',
   },
@@ -930,10 +997,10 @@ const styles = StyleSheet.create({
   },
   dynastyTextBlock: {
     alignItems: 'center',
-    gap: 2,
+    gap: 1,
   },
   dynastyLabel: {
-    fontSize: 26,
+    fontSize: 21,
     fontWeight: '500',
     color: Colors.text,
   },
@@ -941,10 +1008,10 @@ const styles = StyleSheet.create({
     color: Colors.white,
   },
   dynastySubtitle: {
-    fontSize: 10,
+    fontSize: 8,
     color: '#91887C',
     fontWeight: '700',
-    letterSpacing: 0.2,
+    letterSpacing: 0.16,
     textTransform: 'uppercase',
   },
   dynastySubtitleActive: {
@@ -1067,27 +1134,6 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 18,
     fontWeight: '800',
-  },
-  provinceRow: {
-    gap: 8,
-    paddingVertical: 18,
-  },
-  provinceChip: {
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: '#E6E2D8',
-  },
-  provinceChipActive: {
-    backgroundColor: stylesVars.heritagePrimary,
-  },
-  provinceChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  provinceChipTextActive: {
-    color: Colors.white,
   },
   museumFilterGrid: {
     gap: 12,

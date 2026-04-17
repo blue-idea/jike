@@ -158,3 +158,54 @@ export const MUSEUM_CARDS: MuseumCardItem[] = [
     tags: ['一级博物馆'],
   },
 ];
+
+export const CHINA_REGIONS = [
+  {
+    name: '陕西省',
+    cities: [
+      {
+        name: '西安市',
+        districts: ['碑林区', '雁塔区', '未央区', '莲湖区', '新城区', '灞桥区'],
+      },
+      {
+        name: '咸阳市',
+        districts: ['秦都区', '渭城区', '杨陵区'],
+      },
+      {
+        name: '宝鸡市',
+        districts: ['渭滨区', '金台区', '陈仓区'],
+      },
+    ],
+  },
+  {
+    name: '北京市',
+    cities: [
+      {
+        name: '北京市',
+        districts: ['东城区', '西城区', '朝阳区', '丰台区', '石景山区', '海淀区'],
+      },
+    ],
+  },
+  {
+    name: '江苏省',
+    cities: [
+      {
+        name: '南京市',
+        districts: ['玄武区', '秦淮区', '建邺区', '鼓楼区', '浦口区'],
+      },
+      {
+        name: '苏州市',
+        districts: ['虎丘区', '吴中区', '相城区', '姑苏区'],
+      },
+    ],
+  },
+  {
+    name: '上海市',
+    cities: [
+      {
+        name: '上海市',
+        districts: ['黄浦区', '徐汇区', '长宁区', '静安区', '普陀区'],
+      },
+    ],
+  },
+];

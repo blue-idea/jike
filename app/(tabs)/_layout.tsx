@@ -96,6 +96,24 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="ai-guide-detail"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="ai-camera-result"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="ai-camera-viewfinder"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
