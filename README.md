@@ -198,6 +198,14 @@ jike/package.json#L1-1
 pnpm typecheck
 ```
 
+### Git 提交前检查（Husky + lint-staged）
+
+在仓库根目录执行 `npm install` 时，`prepare` 脚本会安装 [Husky](https://typicode.github.io/husky/) Git 钩子。`git commit` 触发 `pre-commit`：对暂存区匹配的 `*.ts`、`*.tsx`、`*.js`、`*.jsx`、`*.mjs`、`*.cjs` 运行 ESLint（`eslint --fix`）；若暂存包含 `.ts` / `.tsx`，再执行一次全项目 `npm run typecheck`（`tsc --noEmit`）。任一检查失败则阻断提交。
+
+新克隆仓库后按上文安装依赖即可复现钩子；若未生效，请确认已执行 `npm install` 且存在 `.husky/pre-commit`。
+
+仅在排障或紧急场景需要跳过钩子：`git commit --no-verify`（或 `git commit -n`）。
+
 ---
 
 ## ⚙️ 环境配置

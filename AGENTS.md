@@ -1,20 +1,6 @@
 # AGENTS.md — 仓库协作指引
 
-面向在本仓库工作的 **人类与 AI 助手**：下列为 **原则与边界**，不替代 `docs/spec/` 中的完整规格。实现细节以 **`docs/spec/constitution.md`**（最高优先级）与 **`docs/spec/design.md`** 为准；产品与验收条文见 **`docs/spec/requirements.md`**；库表与 HTTP 契约分别以 **`docs/spec/data.md`**、**`docs/spec/api.md`** 为准。
-
----
-
-## 1. 文档优先级
-
-1. **`docs/spec/constitution.md`** — 工程化、包管理、安全、质量基线、沟通方式；与需求冲突时按宪法与需求文档处理，**须在 PR 中显式说明** 任何偏离及风险。  
-2. **`docs/spec/design.md`** — 技术架构、选型边界、测试策略摘要。  
-3. **`docs/spec/requirements.md`** — 产品需求与验收标准（业务细则不在本文件展开）。
-
-若实现与已定稿规格冲突：**先修订文档并达成共识，再改代码**（或同一 PR 内同步文档与说明）。
-
----
-
-## 2. 技术栈与架构边界（摘要）
+## 技术栈与架构边界（摘要）
 
 | 维度 | 约定 |
 | --- | --- |
@@ -27,27 +13,8 @@
 
 ---
 
-## 3. 工程化与安全（摘自宪法，须遵守）
 
-- **严禁无意义重复**：相同规则一处抽象；**先查后写**，优先扩展现有模块。  
-- **模块化、统一接口、配置集中**：魔法值与开关进约定配置层，不散落在 UI。  
-- **密钥与环境变量**：任何密钥、高权限端点 **仅** 经环境变量或 CI/部署密钥库注入；**禁止**写入源码或提交进仓库。  
-- **包管理**：生产路径默认 **稳定版**；禁止无故删锁文件式「全量重装」提交；锁文件纳入版本控制。  
-- **仓库操作**：搜索、批量替换、清理须 **排除** `node_modules` 与构建产物；脚本与示例路径考虑 **Windows / macOS / Linux**。  
-- **多用户云端数据**：须在数据层落实 **按用户隔离**（如 RLS），禁止仅靠前端隐藏接口。  
-- **传输与日志**：对外 **HTTPS**；敏感载荷不在日志中明文打印。
-
----
-
-## 4. 认证、会话与路由（设计摘要）
-
-- **主功能**须在 **有效登录会话** 下使用；根布局依据 Auth 会话在 **未登录认证流** 与 **已登录主应用** 之间切换（expo-router **Stack / Redirect** 模式）。  
-- **Supabase Auth** 与 **`@react-native-async-storage/async-storage`** 作为会话存储为推荐组合；对 Edge 的请求使用 **`Authorization: Bearer <access_token>`**，并封装 **统一超时**（与设计文档中的大模型超时阈值一致，由 `api.md` / 需求定义）。  
-- Token 失效时：**401 → 引导重新登录**，不在客户端绕过鉴权。
-
----
-
-## 5. 测试与质量基线
+##  测试与质量基线
 
 - **合并前**：通过项目已配置的 **ESLint** 与 **TypeScript 检查**（如 `tsc --noEmit`）；不依赖大面积注释关闭规则。  
 - **一期不将 Vitest 纳入基线**；自动化以 **Lint、类型检查、Playwright**（若仓库已接 Web/导出路径）及 **关键手工** 为主。  
@@ -55,17 +22,53 @@
 - **重构**：不改变对外行为；行为变更须有测试或验收说明。
 
 ---
+Always respond in Chinese-simplified。
 
-## 6. 沟通与注释
+## 工程化规范
 
-- **团队协作文档、设计说明、代码评审相关注释**：**中文**，简洁准确。  
-- **面向用户的文案**：以产品需求为准。  
-- **需求/契约不清或冲突**：**先澄清再实现**，避免猜测式开发。  
-- **非显而易见的决策**：代码中保留 **必要且不过度** 的注释。
+在编写代码时，请务必遵循以下原则：
+
+1. **严禁重复**: 任何重复的代码逻辑都必须被抽象成可复用的单元（函数、类等）。
+2. **检查现有代码**：先分析项目中是否已有类似实现
+3. **模块化设计**：将功能拆分为独立、可复用的模块
+4. **统一接口**：使用一致的参数格式和返回值结构
+5. **配置集中管理**：将常量和配置项统一管理
+6. **优先封装**: 将相关功能和数据封装在独立的、职责明确的模块中。
+
+## 编码安全
+
+### 1.Row-Level Security 行级安全（让数据库保护你的用户）
+
+```
+Implement Row-Level Security in my Supabase database.
+Tables: [list them]. Each row only accessible to the user who created it.
+Generate SQL policies to enable RLS on all tables.
+Restrict access based on auth.uid().
+Include policies for SELECT, INSERT, UPDATE, DELETE.
+```
+
+### 2. Rate Limiting
+
+```
+Add rate limiting to all my API routes. Limit each IP address to
+100 requests per hour. Apply globally to all API routes.
+Return a clear error message when the limit is exceeded. Show me
+where to add this and how it will work.
+```
+
+### 3.  将 API 密钥排除在你的代码之外
+
+```
+Move all my API keys to environment variables. Find every place
+in my code using API keys directly (Stripe, AWS, database URLs,
+third-party services). Show me: 1) how to create a .env.local file,
+2) how to update code to use process.env, 3) what to add to .gitignore,
+3) how to set these in Vercel/my hosting platform.
+```
 
 ---
 
-## 7. 规格索引（深入时阅读）
+## 规格索引（深入时阅读）
 
 | 文档 | 用途 |
 | --- | --- |
@@ -77,12 +80,8 @@
 
 ---
 
-## 8. 任务执行习惯（与宪法一致）
 
-- **复杂任务**：先拆分子问题与依赖顺序，再分步改，避免大面积无计划并行修改。  
-- **收尾**：在 PR 或交付说明中简要列出 **后续建议**（待补测试、环境变量等）。
-
-## 9. 仓库与模块结构（演进方向）
+## 仓库与模块结构（演进方向）
 当前主要结构保持，建议增量：
 
 ```
