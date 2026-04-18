@@ -1,7 +1,9 @@
-# 集刻 · Maestro 冒烟：启动应用并校验主导航「首页」可见（与 app.json android.package 一致）
+# 集刻 · Maestro 冒烟：冷启动后校验首页主体内容可见（与 app.json android.package 一致）
 appId: com.manbudezhu.boltexponativewind
 ---
-- launchApp
+- launchApp:
+    clearState: true
 - extendedWaitUntil:
-    visible: "首页"
-    timeout: 90000
+    visible: "探寻文化踪迹"
+    timeout: 120000
+- assertVisible: "探寻文化踪迹"
