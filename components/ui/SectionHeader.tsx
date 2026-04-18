@@ -1,55 +1,40 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/Colors';
-import { ChevronRight } from 'lucide-react-native';
 
-interface SectionHeaderProps {
+export type SectionHeaderProps = {
   title: string;
   subtitle?: string;
   onSeeAll?: () => void;
-}
+};
 
 export function SectionHeader({ title, subtitle, onSeeAll }: SectionHeaderProps) {
   return (
-    <View style={styles.container}>
-      <View style={styles.left}>
-        <View style={styles.titleRow}>
-          <View style={styles.accent} />
-          <Text style={styles.title}>{title}</Text>
-        </View>
-        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+    <View style={styles.row}>
+      <View style={styles.texts}>
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
-      {onSeeAll && (
-        <TouchableOpacity style={styles.seeAll} onPress={onSeeAll}>
-          <Text style={styles.seeAllText}>查看全部</Text>
-          <ChevronRight size={14} color={Colors.accent} />
+      {onSeeAll ? (
+        <TouchableOpacity onPress={onSeeAll} hitSlop={8} accessibilityRole="button">
+          <Text style={styles.seeAll}>查看全部</Text>
         </TouchableOpacity>
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 4,
     marginBottom: 12,
+    gap: 12,
   },
-  left: {
+  texts: {
     flex: 1,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  accent: {
-    width: 3,
-    height: 18,
-    backgroundColor: Colors.accent,
-    borderRadius: 2,
   },
   title: {
     fontSize: 18,
@@ -58,19 +43,14 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 12,
+    marginTop: 4,
+    fontSize: 13,
     color: Colors.textMuted,
-    marginTop: 2,
-    marginLeft: 11,
+    lineHeight: 18,
   },
   seeAll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  seeAllText: {
     fontSize: 13,
-    color: Colors.accent,
+    color: Colors.primaryLight,
     fontWeight: '500',
   },
 });

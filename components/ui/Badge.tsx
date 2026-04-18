@@ -1,39 +1,29 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Colors } from '@/constants/Colors';
 
-interface BadgeProps {
+export type BadgeProps = {
   label: string;
-  color?: string;
-  textColor?: string;
-  size?: 'sm' | 'md';
-}
+  color: string;
+};
 
-export function Badge({ label, color = Colors.accent, textColor = Colors.white, size = 'md' }: BadgeProps) {
+export function Badge({ label, color }: BadgeProps) {
   return (
-    <View style={[styles.badge, { backgroundColor: color }, size === 'sm' && styles.badgeSm]}>
-      <Text style={[styles.label, { color: textColor }, size === 'sm' && styles.labelSm]}>{label}</Text>
+    <View style={[styles.badge, { backgroundColor: `${color}26`, borderColor: `${color}55` }]}>
+      <Text style={[styles.text, { color }]}>{label}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  badgeSm: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  label: {
+  text: {
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  labelSm: {
-    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });

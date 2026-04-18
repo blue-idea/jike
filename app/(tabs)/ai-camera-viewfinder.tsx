@@ -10,7 +10,6 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
-import { CommonTopBar } from '@/components/ui/CommonTopBar';
 
 const { width, height } = Dimensions.get('window');
 
