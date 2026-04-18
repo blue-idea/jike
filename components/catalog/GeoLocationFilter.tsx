@@ -30,6 +30,7 @@ type GeoLocationFilterProps = {
   primaryColor: string;
   defaultLocation?: LocationValue;
   relocatedLocation?: LocationValue;
+  showLevelFilter?: boolean;
 };
 
 const DEFAULT_LOCATION: LocationValue = {
@@ -52,6 +53,7 @@ export function GeoLocationFilter({
   primaryColor,
   defaultLocation = DEFAULT_LOCATION,
   relocatedLocation = DEFAULT_RELOCATED_LOCATION,
+  showLevelFilter = true,
 }: GeoLocationFilterProps) {
   const [isLocating, setIsLocating] = useState(false);
   const [useAutoLocation, setUseAutoLocation] = useState(true);
@@ -211,18 +213,20 @@ export function GeoLocationFilter({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.levelFilterRow}>
-          <Text style={styles.levelFilterLabel}>A级等级</Text>
-          <TouchableOpacity
-            style={styles.levelFilterTrigger}
-            onPress={() => openPicker('level')}
-          >
-            <Text style={[styles.levelFilterValue, { color: primaryColor }]}>
-              {location.level}
-            </Text>
-            <ChevronDown size={14} color={primaryColor} />
-          </TouchableOpacity>
-        </View>
+        {showLevelFilter && (
+          <View style={styles.levelFilterRow}>
+            <Text style={styles.levelFilterLabel}>A级等级</Text>
+            <TouchableOpacity
+              style={styles.levelFilterTrigger}
+              onPress={() => openPicker('level')}
+            >
+              <Text style={[styles.levelFilterValue, { color: primaryColor }]}>
+                {location.level}
+              </Text>
+              <ChevronDown size={14} color={primaryColor} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <Modal
@@ -296,7 +300,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(129,53,32,0.1)',
+    borderColor: 'rgba(14,71,83,0.1)',
     marginBottom: 20,
   },
   locationHeaderRow: {
@@ -803,7 +807,7 @@ const museumStyles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(129,53,32,0.1)',
+    borderColor: 'rgba(14,71,83,0.1)',
     marginBottom: 20,
   },
   filterSection: {

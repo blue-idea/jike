@@ -185,7 +185,10 @@ export function ScenicSearchScreen() {
 export function HeritageDirectoryContent() {
   return (
     <View style={styles.sectionPad}>
-      <GeoLocationFilter primaryColor={stylesVars.heritagePrimary} />
+      <GeoLocationFilter
+        primaryColor={stylesVars.heritagePrimary}
+        showLevelFilter={false}
+      />
 
       <View style={styles.contentSection}>
         <View style={styles.dynastySectionHeader}>
@@ -436,7 +439,7 @@ export function MuseumDirectoryScreen() {
 
 const stylesVars = {
   heritageBg: Colors.background,
-  heritagePrimary: '#813520',
+  heritagePrimary: '#0E4753',
   scenicPrimary: '#0E4753',
 };
 
@@ -834,7 +837,7 @@ const styles = StyleSheet.create({
   categoryLabel: {
     fontSize: 12,
     letterSpacing: 2.4,
-    color: '#6E564B',
+    color: '#5C6B6D',
   },
   labelRow: {
     flexDirection: 'row',
@@ -873,8 +876,8 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   dynastyCardActive: {
-    backgroundColor: '#B25A3E',
-    borderColor: '#B25A3E',
+    backgroundColor: '#266E7C',
+    borderColor: '#266E7C',
   },
   dynastyYears: {
     fontSize: 8,
@@ -883,7 +886,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dynastyYearsActive: {
-    color: '#F4D5CB',
+    color: '#BDE4E9',
   },
   dynastyTextBlock: {
     alignItems: 'center',
@@ -905,7 +908,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   dynastySubtitleActive: {
-    color: '#F1CEC2',
+    color: '#BDE4E9',
   },
   heritageTypeStack: {
     gap: 12,
@@ -953,7 +956,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 9,
-    backgroundColor: '#FFD8CC',
+    backgroundColor: '#D1EAEE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -966,7 +969,7 @@ const styles = StyleSheet.create({
   sliderValue: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: '#FFDBD1',
+    backgroundColor: '#D1EAEE',
     borderRadius: 10,
   },
   sliderValueText: {
@@ -1055,7 +1058,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
-    backgroundColor: 'rgba(129,53,32,0.92)',
+    backgroundColor: 'rgba(14,71,83,0.92)',
     color: Colors.white,
     fontSize: 10,
     fontWeight: '800',
