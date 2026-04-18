@@ -7,6 +7,10 @@ dist/
 web-build/
 expo-env.d.ts
 
+# Expo prebuild 生成的原生工程（CI 内按需生成；本地勿误提交）
+/android
+/ios
+
 # native
 *.orig.*
 *.jks

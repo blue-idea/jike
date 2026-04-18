@@ -1,0 +1,7 @@
+# 集刻 · Maestro 冒烟：启动应用并校验主导航「首页」可见（与 app.json android.package 一致）
+appId: com.manbudezhu.boltexponativewind
+---
+- launchApp
+- extendedWaitUntil:
+    visible: "首页"
+    timeout: 90000

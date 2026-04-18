@@ -102,3 +102,10 @@ docs/spec/
   api.md                # API surface (authoritative)
 ```
 
+## 任务
+每项任务编写完成后都需要执行下面的流程
+1. 类型检查，tsc --noEmit 零错误
+2. lint 检查，eslint 零 error（warning 允许） 
+3. 相关单元测试通过率 100% 
+4. 核心 E2E 流程验证通过 
+5. build 构建检查，无错误
