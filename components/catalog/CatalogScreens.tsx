@@ -18,12 +18,13 @@ import {
   HERITAGE_DYNASTIES,
   HERITAGE_TYPES,
   MUSEUM_CARDS,
-  SCENIC_CATEGORY_TABS,
   SCENIC_FEATURED,
-  SCENIC_FILTERS,
   SCENIC_MAP_IMAGE,
 } from '@/constants/CatalogData';
-import { GeoLocationFilter } from '@/components/catalog/GeoLocationFilter';
+import {
+  GeoLocationFilter,
+  MuseumFilterPanel,
+} from '@/components/catalog/GeoLocationFilter';
 import {
   ArrowLeft,
   ArrowRight,
@@ -31,7 +32,6 @@ import {
   Landmark,
   MapPin,
   Search,
-  SlidersHorizontal,
   Star,
   Swords,
 } from 'lucide-react-native';
@@ -66,62 +66,7 @@ export function ScenicSearchContent() {
   return (
     <>
       <View style={styles.sectionPad}>
-        <View style={styles.searchBoxLarge}>
-          <Search size={18} color={stylesVars.scenicPrimary} />
-          <TextInput
-            editable={false}
-            placeholder="搜索古建筑、遗址、博物馆..."
-            placeholderTextColor="#8C8173"
-            style={styles.searchInput}
-          />
-        </View>
-      </View>
-
-      <View style={styles.sectionPad}>
         <GeoLocationFilter primaryColor={stylesVars.scenicPrimary} />
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.tabRow}
-      >
-        {SCENIC_CATEGORY_TABS.map((tab, index) => {
-          const active = index === 0;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={[styles.categoryTab, active && styles.categoryTabActive]}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[
-                  styles.categoryTabText,
-                  active && styles.categoryTabTextActive,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      <View style={[styles.sectionPad, styles.filterCard]}>
-        <View style={styles.filterGrid}>
-          {SCENIC_FILTERS.map((filter) => (
-            <View key={filter.id} style={styles.filterBlock}>
-              <Text style={styles.filterLabel}>{filter.label}</Text>
-              <TouchableOpacity style={styles.filterValue} activeOpacity={0.85}>
-                <Text style={styles.filterValueText}>{filter.value}</Text>
-                <ChevronDown size={16} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          ))}
-          <TouchableOpacity style={styles.filterAction} activeOpacity={0.9}>
-            <SlidersHorizontal size={18} color={Colors.white} />
-          </TouchableOpacity>
-        </View>
       </View>
 
       <View style={styles.sectionPad}>
@@ -423,62 +368,7 @@ export function HeritageDirectoryScreen() {
 export function MuseumDirectoryContent() {
   return (
     <View style={styles.sectionPad}>
-      <View style={styles.searchBox}>
-        <Search size={18} color={stylesVars.heritagePrimary} />
-        <TextInput
-          editable={false}
-          placeholder="搜索博物馆..."
-          placeholderTextColor="#8C8173"
-          style={styles.searchInput}
-        />
-      </View>
-
-      <GeoLocationFilter primaryColor={stylesVars.heritagePrimary} />
-
-      <View style={styles.museumFilterGrid}>
-        <View style={styles.museumFilterCard}>
-          <Text style={styles.museumFilterLabel}>质量等级</Text>
-          <View style={styles.tagRow}>
-            {['一级', '二级', '三级', '无级别'].map((tag, index) => (
-              <Text
-                key={tag}
-                style={[
-                  styles.museumFilterTag,
-                  index === 0 && styles.museumFilterTagActive,
-                ]}
-              >
-                {tag}
-              </Text>
-            ))}
-          </View>
-        </View>
-        <View style={styles.museumFilterCard}>
-          <Text style={styles.museumFilterLabel}>博物馆性质</Text>
-          <View style={styles.tagRow}>
-            {['综合', '历史', '艺术', '科技'].map((tag) => (
-              <Text key={tag} style={styles.museumFilterTag}>
-                {tag}
-              </Text>
-            ))}
-          </View>
-        </View>
-        <View style={styles.museumSwitchCard}>
-          <View>
-            <Text style={styles.museumFilterLabel}>开放政策</Text>
-            <Text style={styles.switchText}>仅显示免费开放</Text>
-          </View>
-          <View style={styles.switchTrack}>
-            <View style={styles.switchThumb} />
-          </View>
-        </View>
-        <View style={styles.museumSwitchCard}>
-          <View>
-            <Text style={styles.museumFilterLabel}>排序方式</Text>
-            <Text style={styles.switchText}>离我最近</Text>
-          </View>
-          <ChevronDown size={18} color={stylesVars.heritagePrimary} />
-        </View>
-      </View>
+      <MuseumFilterPanel primaryColor={stylesVars.heritagePrimary} />
 
       <View style={styles.museumList}>
         {MUSEUM_CARDS.map((item) => (
@@ -1135,65 +1025,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
-  museumFilterGrid: {
-    gap: 12,
-    marginBottom: 22,
-  },
-  museumFilterCard: {
-    backgroundColor: '#F7F3E9',
-    borderRadius: 16,
-    padding: 14,
-    gap: 10,
-  },
-  museumFilterLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: stylesVars.heritagePrimary,
-    letterSpacing: 1,
-  },
-  museumFilterTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#E6E2D8',
-    color: Colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '600',
-    overflow: 'hidden',
-  },
-  museumFilterTagActive: {
-    backgroundColor: '#FFDBD1',
-    color: stylesVars.heritagePrimary,
-  },
-  museumSwitchCard: {
-    backgroundColor: '#F7F3E9',
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  switchText: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  switchTrack: {
-    width: 46,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: stylesVars.heritagePrimary,
-    justifyContent: 'center',
-    paddingHorizontal: 3,
-    alignItems: 'flex-end',
-  },
-  switchThumb: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: Colors.white,
-  },
+
   museumList: {
     gap: 16,
   },

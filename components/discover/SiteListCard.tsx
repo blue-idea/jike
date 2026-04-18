@@ -1,9 +1,7 @@
 import React from 'react';
-import {
-  View, Text, Image, TouchableOpacity, StyleSheet,
-} from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/Colors';
-import { MapPin, Star, Heart, Navigation2 } from 'lucide-react-native';
+import { MapPin, Heart, Navigation2 } from 'lucide-react-native';
 
 interface SiteListCardProps {
   name: string;
@@ -23,29 +21,67 @@ interface SiteListCardProps {
 }
 
 export function SiteListCard({
-  name, category, level, province, city, dynasty, type,
-  image, tags, distance, rating, isFavorite, onPress, onFavorite,
+  name,
+  category,
+  level,
+  province,
+  city,
+  dynasty,
+  type,
+  image,
+  tags,
+  distance,
+  rating,
+  isFavorite,
+  onPress,
+  onFavorite,
 }: SiteListCardProps) {
-  const categoryColor = category === 'heritage' ? Colors.seal
-    : category === 'museum' ? Colors.primary : Colors.accent;
+  const categoryColor =
+    category === 'heritage'
+      ? Colors.seal
+      : category === 'museum'
+        ? Colors.primary
+        : Colors.accent;
 
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.88}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={onPress}
+      activeOpacity={0.88}
+    >
       <View style={styles.imageWrapper}>
-        <Image source={{ uri: image }} style={styles.image} resizeMode="cover" />
-        <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
+        <Image
+          source={{ uri: image }}
+          style={styles.image}
+          resizeMode="cover"
+        />
+        <View
+          style={[styles.categoryDot, { backgroundColor: categoryColor }]}
+        />
       </View>
       <View style={styles.content}>
         <View style={styles.header}>
           <View style={styles.titleArea}>
-            <Text style={styles.name} numberOfLines={1}>{name}</Text>
+            <Text style={styles.name} numberOfLines={1}>
+              {name}
+            </Text>
             {level && (
-              <View style={[styles.levelBadge, { backgroundColor: categoryColor + '18' }]}>
-                <Text style={[styles.levelText, { color: categoryColor }]}>{level}</Text>
+              <View
+                style={[
+                  styles.levelBadge,
+                  { backgroundColor: categoryColor + '18' },
+                ]}
+              >
+                <Text style={[styles.levelText, { color: categoryColor }]}>
+                  {level}
+                </Text>
               </View>
             )}
           </View>
-          <TouchableOpacity onPress={onFavorite} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+          <TouchableOpacity
+            onPress={onFavorite}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <Heart
               size={18}
               color={isFavorite ? Colors.seal : Colors.textLight}
@@ -56,7 +92,9 @@ export function SiteListCard({
 
         <View style={styles.metaRow}>
           <MapPin size={11} color={Colors.textMuted} />
-          <Text style={styles.meta}>{province} · {city}</Text>
+          <Text style={styles.meta}>
+            {province} · {city}
+          </Text>
           <View style={styles.dot} />
           <Text style={styles.meta}>{dynasty}</Text>
           <View style={styles.dot} />
@@ -76,12 +114,6 @@ export function SiteListCard({
             <View style={styles.distanceRow}>
               <Navigation2 size={11} color={Colors.accent} />
               <Text style={styles.distance}>{distance}</Text>
-            </View>
-          )}
-          {rating && (
-            <View style={styles.ratingRow}>
-              <Star size={12} color={Colors.gold} fill={Colors.gold} />
-              <Text style={styles.rating}>{rating.toFixed(1)}</Text>
             </View>
           )}
         </View>
@@ -201,16 +233,6 @@ const styles = StyleSheet.create({
   distance: {
     fontSize: 12,
     color: Colors.accent,
-    fontWeight: '600',
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  rating: {
-    fontSize: 12,
-    color: Colors.text,
     fontWeight: '600',
   },
 });

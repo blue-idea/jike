@@ -1,14 +1,8 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { MapPin, Star, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { MapPin, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface SiteCardProps {
   name: string;
@@ -26,12 +20,27 @@ interface SiteCardProps {
 }
 
 export function SiteCard({
-  name, province, city, dynasty, type, image, tags, rating, distance, isStamped, level, onPress,
+  name,
+  province,
+  city,
+  dynasty,
+  type,
+  image,
+  tags,
+  rating,
+  distance,
+  isStamped,
+  level,
+  onPress,
 }: SiteCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
       <View style={styles.imageContainer}>
-        <Image source={{ uri: image }} style={styles.image} resizeMode="cover" />
+        <Image
+          source={{ uri: image }}
+          style={styles.image}
+          resizeMode="cover"
+        />
         <LinearGradient
           colors={['transparent', 'rgba(26,22,3,0.7)']}
           style={styles.imageGradient}
@@ -53,10 +62,14 @@ export function SiteCard({
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.name} numberOfLines={1}>{name}</Text>
+        <Text style={styles.name} numberOfLines={1}>
+          {name}
+        </Text>
         <View style={styles.locationRow}>
           <MapPin size={11} color={Colors.textMuted} />
-          <Text style={styles.location}>{province} · {city}</Text>
+          <Text style={styles.location}>
+            {province} · {city}
+          </Text>
         </View>
         <View style={styles.bottomRow}>
           <View style={styles.tagRow}>
@@ -66,16 +79,8 @@ export function SiteCard({
               </View>
             ))}
           </View>
-          {distance && (
-            <View style={styles.ratingRow}>
-              <Star size={11} color={Colors.gold} fill={Colors.gold} />
-              <Text style={styles.rating}>{rating}</Text>
-            </View>
-          )}
         </View>
-        {distance && (
-          <Text style={styles.distance}>{distance}</Text>
-        )}
+        {distance && <Text style={styles.distance}>{distance}</Text>}
       </View>
     </TouchableOpacity>
   );
@@ -196,16 +201,7 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontWeight: '500',
   },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  rating: {
-    fontSize: 12,
-    color: Colors.text,
-    fontWeight: '600',
-  },
+
   distance: {
     fontSize: 11,
     color: Colors.accent,

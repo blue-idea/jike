@@ -63,7 +63,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="collection"
         options={{
-          title: '收藏',
+          title: '工具',
           tabBarIcon: ({ focused }) => (
             <TabIcon Icon={BookOpen} focused={focused} />
           ),
