@@ -150,11 +150,7 @@ jobs:
           script: |
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             mkdir -p artifacts/maestro
-            if ! maestro test e2e/maestro/ --format junit --output artifacts/maestro/junit.xml; then
-              adb exec-out screencap -p > artifacts/maestro/failure.png || true
-              maestro hierarchy > artifacts/maestro/view-hierarchy.txt || true
-              exit 1
-            fi
+            maestro test e2e/maestro/ --format junit --output artifacts/maestro/junit.xml || (adb exec-out screencap -p > artifacts/maestro/failure.png || true; maestro hierarchy > artifacts/maestro/view-hierarchy.txt || true; exit 1)
 
       - name: Upload Maestro artifacts
         if: always()
