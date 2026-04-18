@@ -81,3 +81,25 @@
 
 - **复杂任务**：先拆分子问题与依赖顺序，再分步改，避免大面积无计划并行修改。  
 - **收尾**：在 PR 或交付说明中简要列出 **后续建议**（待补测试、环境变量等）。
+
+## 9. 仓库与模块结构（演进方向）
+当前主要结构保持，建议增量：
+
+```
+app/                    # expo-router routes (existing)
+components/             # reusable UI (existing)
+constants/              # theme, mock → gradually Supabase-backed defaults
+lib/
+  supabase.ts           # singleton client → add Auth helpers
+  auth/                 # optional: session hooks, login gate
+  api/                  # optional: Edge client wrapper (timeout T)
+hooks/
+tests/                  # 所有的测试代码
+docs/spec/
+  requirements.md
+  constitution.md
+  design.md
+  data.md               # database (authoritative)
+  api.md                # API surface (authoritative)
+```
+
