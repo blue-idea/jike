@@ -1,0 +1,44 @@
+# tests/maestro/ai_guide.yaml
+# Maestro E2E 测试：AI 导游与超时
+
+appId: com.jike.app
+
+---
+- launchApp
+- waitForTimeout: 2000
+
+# 登录（假设测试账号）
+- inputText:
+    text: "test@example.com"
+    index: 0
+- inputText:
+    text: "Test123456"
+    index: 1
+- tapOn: "登录"
+- waitForTimeout: 3000
+
+# 进入 AI 导游页面
+- tapOn: "工具"
+- waitForTimeout: 1000
+- tapOn: "AI 导游"
+- waitForTimeout: 2000
+
+# 验证 AI 导游页面元素
+- assertVisible: "AI 导游"
+- assertVisible: "景区"
+- assertVisible: "国保"
+- assertVisible: "博物馆"
+
+# 选择一个 POI 并生成讲解
+- tapOn: "秦始皇帝陵博物院"
+- waitForTimeout: 1000
+- tapOn: "生成讲解"
+- waitForTimeout: 8000
+
+# 验证讲解结果展示
+- assertVisible: "历史背景"
+- assertVisible: "重试"
+
+# 测试重试按钮
+- tapOn: "重试"
+- waitForTimeout: 5000
