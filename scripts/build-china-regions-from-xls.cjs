@@ -1,4 +1,3 @@
-/* global __dirname */
 /**
  * 从 docs/data/全国省市区划分数据表.xls 生成 constants/chinaRegions.generated.ts
  * 解析规则：Sheet1 前半为「省/市/区县」文本列（空省继承上一省）；后半为行政区划代码列（省为 xx0000，市为 1 个前导 NBSP，区县为 3 个前导 NBSP）。

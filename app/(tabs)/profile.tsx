@@ -29,8 +29,7 @@ const TITLES = ['文化旅行者', '古建筑爱好者', '博物馆达人'];
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const [selectedTitle, setSelectedTitle] = useState(0);
-  const [showAllStamps, setShowAllStamps] = useState(false);
-  const displayedStamps = showAllStamps ? STAMPS_DATA : STAMPS_DATA.slice(0, 6);
+  const displayedStamps = STAMPS_DATA.slice(0, 6);
 
   return (
     <View style={styles.root}>

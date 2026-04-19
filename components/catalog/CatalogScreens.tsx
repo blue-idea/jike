@@ -7,7 +7,6 @@ import {
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -39,10 +38,8 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
-  ChevronDown,
   Landmark,
   MapPin,
-  Search,
   Star,
   Swords,
 } from 'lucide-react-native';
