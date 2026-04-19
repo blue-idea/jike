@@ -1,10 +1,10 @@
 完成摘要
-- lib/route/routeService.ts: queryGaodeRoute() 高德路径规划（驾车/公交/步行），optimizeRoute() 贪心最近邻多点优化，navigateWithGaode() App唤起+降级策略，formatRouteInfo() 格式化输出
-- components/route/RouteWebViewFallback.tsx: 导航 WebView 降级组件（高德App未安装时用JSAPI展示路线）
+- lib/heatmap/heatmapService.ts: queryHeatmapData() 获取高德热力/路况图层数据，getDegradedMessage() 降级说明
+- components/heatmap/HeatmapLayer.tsx: 热力/路况图层 WebView 组件，支持降级态与错误处理
 
 EARS 覆盖矩阵
-- EARS-1 → lib/route/routeService.ts:queryGaodeRoute + optimizeRoute：支持步行/驾车/公交，展示分段与总时长距离
-- EARS-2 → lib/route/routeService.ts:navigateWithGaode + RouteWebViewFallback：App未安装时WebView降级展示导航
+- EARS-1 → HeatmapLayer: 展示热门程度或路况图层并提供清晰图例
+- EARS-2 → HeatmapLayer: 接口不可用或未授权定位时展示降级说明并灰化控件
 
 验证
 - npm run typecheck：通过，零错误
