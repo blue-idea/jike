@@ -1,10 +1,10 @@
 完成摘要
-- app/poi/[id].tsx: POI 详情页路由，支持 scenic/heritage/museum 三类，展示结构化文化信息与下拉刷新
-- lib/poi/poiQueries.ts: queryPoiDetail() 按 id 查询 POI 完整字段，queryPoiVersion() 查询版本用于缓存失效判定
+- lib/route/routeService.ts: queryGaodeRoute() 高德路径规划（驾车/公交/步行），optimizeRoute() 贪心最近邻多点优化，navigateWithGaode() App唤起+降级策略，formatRouteInfo() 格式化输出
+- components/route/RouteWebViewFallback.tsx: 导航 WebView 降级组件（高德App未安装时用JSAPI展示路线）
 
 EARS 覆盖矩阵
-- EARS-1 → app/poi/[id].tsx：展示结构化文化信息（基础信息、类型特有详情、storyline 占位、图文）
-- EARS-2 → app/poi/[id].tsx:onRefresh + queryPoiVersion：下拉刷新重新拉取，版本更新后展示最新内容
+- EARS-1 → lib/route/routeService.ts:queryGaodeRoute + optimizeRoute：支持步行/驾车/公交，展示分段与总时长距离
+- EARS-2 → lib/route/routeService.ts:navigateWithGaode + RouteWebViewFallback：App未安装时WebView降级展示导航
 
 验证
 - npm run typecheck：通过，零错误
