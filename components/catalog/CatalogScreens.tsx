@@ -1,5 +1,6 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   Image,
   ImageBackground,
   SafeAreaView,
@@ -31,6 +32,7 @@ import {
   type MuseumQueryFormState,
   type ScenicLocationFormState,
 } from '@/lib/catalog/catalogQueryFilters';
+import { queryScenicSpots } from '@/lib/catalog/supabaseCatalogQueries';
 import {
   GeoLocationFilter,
   MuseumFilterPanel,
@@ -70,17 +72,59 @@ function TopBar({ title }: { title: string }) {
   );
 }
 
-export function ScenicSearchContent() {
+interface ScenicSearchContentProps {
+  keyword?: string;
+}
+
+export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) {
   const [scenicResults, setScenicResults] = useState<ScenicFeature[]>(() => [
     ...SCENIC_FEATURED,
   ]);
   const [resultHint, setResultHint] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadScenicData = useCallback(async (f: ScenicLocationFormState) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 使用真实数据库查询
+      const data = await queryScenicSpots({
+        province: f.province !== '请选择' ? f.province : undefined,
+        city: f.city !== '请选择' ? f.city : undefined,
+        level: f.level !== '全部等级' ? f.level : undefined,
+        keyword: keyword.trim() || undefined,
+      });
+      setScenicResults(data.length > 0 ? data : []);
+      setResultHint(formatScenicResultHint(f, data.length));
+    } catch (e) {
+      // 数据库查询失败时回退到模拟数据
+      console.warn('数据库查询失败，回退到模拟数据:', e);
+      const next = filterScenicFeatures([...SCENIC_FEATURED], { ...f, level: f.level === '全部等级' ? '' : f.level });
+      setScenicResults(next);
+      setResultHint(formatScenicResultHint(f, next.length));
+    } finally {
+      setLoading(false);
+    }
+  }, [keyword]);
 
   const onApplyScenicQuery = useCallback((f: ScenicLocationFormState) => {
-    const next = filterScenicFeatures([...SCENIC_FEATURED], f);
-    setScenicResults(next);
-    setResultHint(formatScenicResultHint(f, next.length));
-  }, []);
+    loadScenicData(f);
+  }, [loadScenicData]);
+
+  // 关键词变化时重新查询
+  useEffect(() => {
+    if (keyword.trim()) {
+      // 如果有搜索关键词，用当前筛选条件+关键词查询
+      loadScenicData({
+        province: '陕西省',
+        city: '西安市',
+        district: '碑林区',
+        level: '全部等级',
+        useAutoLocation: true,
+      });
+    }
+  }, [keyword, loadScenicData]);
 
   const hero = scenicResults[0];
   const scenicCards = scenicResults.slice(1);
@@ -112,7 +156,17 @@ export function ScenicSearchContent() {
           <Text style={styles.filterResultHint}>{resultHint}</Text>
         ) : null}
 
-        {hero ? (
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={stylesVars.scenicPrimary} />
+            <Text style={styles.loadingText}>正在加载A级景区...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.catalogEmptyBox}>
+            <Text style={styles.catalogEmptyTitle}>加载失败</Text>
+            <Text style={styles.catalogEmptyHint}>{error}</Text>
+          </View>
+        ) : hero ? (
           <ImageBackground
             source={{ uri: hero.image }}
             imageStyle={styles.heroImage}
@@ -147,8 +201,9 @@ export function ScenicSearchContent() {
           </View>
         )}
 
-        <View style={styles.cardGrid}>
-          {scenicCards.map((item) => (
+        {!loading && !error && scenicCards.length > 0 && (
+          <View style={styles.cardGrid}>
+            {scenicCards.map((item) => (
             <View key={item.id} style={styles.scenicCard}>
               <Image
                 source={{ uri: item.image }}
@@ -181,6 +236,7 @@ export function ScenicSearchContent() {
             </View>
           ))}
         </View>
+        )}
 
         <View style={styles.mapPromo}>
           <View style={styles.mapPromoText}>
@@ -692,6 +748,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textMuted,
     lineHeight: 20,
+  },
+  loadingBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
   linkBtn: {
     flexDirection: 'row',

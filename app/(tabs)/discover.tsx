@@ -74,7 +74,7 @@ export default function DiscoverScreen() {
 
         <View style={styles.contentContainer}>
           {activeTab === 'heritage' && <HeritageDirectoryContent />}
-          {activeTab === 'scenic' && <ScenicSearchContent />}
+          {activeTab === 'scenic' && <ScenicSearchContent keyword={query} />}
           {activeTab === 'museum' && <MuseumDirectoryContent />}
         </View>
 

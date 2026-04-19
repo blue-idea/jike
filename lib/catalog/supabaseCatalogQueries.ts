@@ -1,11 +1,12 @@
 /**
  * lib/catalog/supabaseCatalogQueries.ts
- * 三类名录 POI 查询（地图用）
+ * 三类名录 POI 查询（地图用 + 发现页列表）
  * EARS-1 覆盖：queryMapPois → 更新点位集合
  * EARS-2 覆盖：网络异常时抛出供 CultureMapView 捕获
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { CULTURE_MAP_DEFAULT_CENTER } from '@/constants/cultureMapData';
+import type { ScenicFeature } from '@/constants/CatalogData';
 
 export type CultureMapLayer = 'scenic' | 'heritage' | 'museum';
 
@@ -18,6 +19,15 @@ export interface MapPoi {
   lat: number;
   scenicLevel?: string; // 仅 scenic
   label?: string;       // 国保批次/博物馆等级
+}
+
+/** 发现页 A 级景区查询参数 */
+export interface ScenicQueryOptions {
+  province?: string;
+  city?: string;
+  level?: string; // '全部等级' | '5A' | '4A' | '3A' | '2A' | '1A'
+  keyword?: string; // 搜索关键词
+  limit?: number;
 }
 
 function createClient_(): SupabaseClient {
@@ -40,22 +50,24 @@ export async function queryMapPois(
   const { limit = 500 } = options;
 
   if (layer === 'scenic') {
+    // 数据库列: lng_wgs84, lat_wgs84, rating, provincial
     let q = supabase
       .from('catalog_scenic_spots')
-      .select('id,name,lng,lat,level,province')
-      .not('lng', 'is', null)
-      .not('lat', 'is', null);
-    if (scenicFilter === '4A') q = q.eq('level', '4A');
-    if (scenicFilter === '5A') q = q.eq('level', '5A');
+      .select('id,name,lng_wgs84,lat_wgs84,rating,provincial,city,full_address,images')
+      .not('lng_wgs84', 'is', null)
+      .not('lat_wgs84', 'is', null);
+    if (scenicFilter === '4A') q = q.eq('rating', '4A');
+    if (scenicFilter === '5A') q = q.eq('rating', '5A');
     const { data, error } = await q.limit(limit);
     if (error) throw error;
     return (data ?? []).map((r) => ({
       id: r.id,
       name: r.name,
       kind: 'scenic' as CultureMapLayer,
-      lng: r.lng,
-      lat: r.lat,
-      scenicLevel: r.level ?? undefined,
+      lng: r.lng_wgs84,
+      lat: r.lat_wgs84,
+      scenicLevel: r.rating ?? undefined,
+      province: r.provincial,
     }));
   }
 
@@ -93,6 +105,68 @@ export async function queryMapPois(
     lat: r.lat,
     label: r.quality_level ?? undefined,
   }));
+}
+
+/**
+ * 查询 A 级景区列表（发现页用）
+ * 数据库列映射: provincial→province, rating→level, lng_wgs84→lng, lat_wgs84→lat
+ */
+export async function queryScenicSpots(
+  options: ScenicQueryOptions = {},
+): Promise<ScenicFeature[]> {
+  const supabase = createClient_();
+  const { level, province, city, keyword, limit = 100 } = options;
+
+  let q = supabase
+    .from('catalog_scenic_spots')
+    .select('id,name,rating,provincial,city,full_address,lng_wgs84,lat_wgs84,images,recommend,sort')
+    .limit(limit);
+
+  // 过滤等级
+  if (level && level !== '全部等级') {
+    q = q.eq('rating', level);
+  }
+
+  // 过滤省份
+  if (province && province !== '请选择') {
+    q = q.eq('provincial', province);
+  }
+
+  // 过滤城市
+  if (city && city !== '请选择') {
+    q = q.eq('city', city);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  if (!data) return [];
+
+  // 映射到前端格式
+  let results: ScenicFeature[] = data.map((r) => ({
+    id: r.id,
+    title: r.name,
+    subtitle: r.full_address || r.city || '',
+    image: r.images?.[0] || '',
+    tags: r.rating ? [`${r.rating}级景区`] : [],
+    province: r.provincial || undefined,
+    city: r.city || undefined,
+    level: r.rating || undefined,
+    distance: undefined,
+    rating: undefined,
+  }));
+
+  // 关键词搜索（前端过滤）
+  if (keyword && keyword.trim()) {
+    const kw = keyword.toLowerCase();
+    results = results.filter(
+      (item) =>
+        item.title?.toLowerCase().includes(kw) ||
+        item.subtitle?.toLowerCase().includes(kw) ||
+        item.tags?.some((t) => t.toLowerCase().includes(kw)),
+    );
+  }
+
+  return results;
 }
 
 /** 默认中心（西安） */
