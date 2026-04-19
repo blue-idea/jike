@@ -88,6 +88,7 @@ jobs:
     env:
       CI: "true"
       EXPO_NO_TELEMETRY: "1"
+      MAESTRO_CLI_NO_ANALYTICS: "1"
       EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
       EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
       EXPO_PUBLIC_AMAP_KEY: ci-placeholder-amap
@@ -130,10 +131,12 @@ jobs:
       - name: Expo prebuild (Android)
         run: npx expo prebuild --platform android
 
-      - name: Build debug APK
+      # Debug 变体默认跳过 JS 打包且开启开发者支持（依赖本机 Metro），CI 无 Metro 会导致白屏/红屏，Maestro 断言失败。
+      # Release 嵌入 bundle 且关闭开发者支持；模板对 release 仍使用 debug keystore，便于 CI 安装。
+      - name: Build release APK (embedded JS for CI)
         run: |
           chmod +x android/gradlew
-          cd android && ./gradlew assembleDebug --stacktrace
+          cd android && ./gradlew assembleRelease --stacktrace
 
       - name: Install Maestro CLI
         run: |
@@ -148,7 +151,7 @@ jobs:
           target: google_apis
           profile: pixel_6
           script: |
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r android/app/build/outputs/apk/release/app-release.apk
             mkdir -p artifacts/maestro
             maestro test e2e/maestro/ --format junit --output artifacts/maestro/junit.xml || (adb exec-out screencap -p > artifacts/maestro/failure.png || true; maestro hierarchy > artifacts/maestro/view-hierarchy.txt || true; exit 1)
 
