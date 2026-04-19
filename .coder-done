@@ -1,10 +1,10 @@
 完成摘要
-- lib/ai/aiPhotoQueries.ts: recognizePhoto() Edge 调用封装（上传 Storage → 多模态识别 → 候选置信度），recognizePhotoMock() 开发阶段降级，mapErrorToChinese() 中文错误映射
-- hooks/usePhotoRecognition.ts: usePhotoRecognition() 状态管理 Hook，支持 recognize/retry/reset
+- lib/ai/aiQaQueries.ts: sendQaQuestion() Edge 调用封装，返回文化领域回答 + 免责声明；sendQaQuestionMock() 开发阶段降级；网络错误标记 [OFFLINE] 用于触发离线保留
+- hooks/useQa.ts: useQa() 状态管理 Hook，支持 ask/retry/reset；离线队列持久化到 AsyncStorage，网络恢复时可 flushOfflineQueue 重发
 
 EARS 覆盖矩阵
-- EARS-1 → recognizePhoto: 多模态识别 + 名录约束 + 候选置信度 + 可跳转详情/AI 导览
-- EARS-2 → aiPhotoQueries.ts: 超时 T 秒中文提示 + 重试机制
+- EARS-1 → sendQaQuestion: 文化领域回答 + 免责声明
+- EARS-2 → useQa: 离线输入保留到 AsyncStorage，网络恢复后 flushOfflineQueue 重发；超时 T 秒中文提示 + 重试
 
 验证
 - npm run typecheck：通过，零错误
