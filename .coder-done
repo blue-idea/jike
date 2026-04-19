@@ -1,9 +1,9 @@
 完成摘要
-- lib/travel/travelService.ts: 轨迹记录（saveTravelSession/getLocalTravelSessions/addPointToSession/associatePoiToSession）、AI 游记生成（generateTravelJournal/generateTravelJournalMock）、游记云端保存（saveTravelJournalToCloud）
+- lib/checkin/checkinService.ts: 地理围栏打卡（500m）、印章体系（6种印章）、成就规则引擎（打卡次数成就）、精度不足二次确认、打卡记录/印章/成就查询
 
 EARS 覆盖矩阵
-- EARS-1 → travelService: 轨迹采样点记录、POI 关联、AI 游记草稿生成
-- EARS-2 → travelService: 未登录本地保存，云端 AI 生成须登录态
+- EARS-1 → checkIn: 500m 围栏判定、印章发放、足迹热力
+- EARS-2 → checkIn: 定位精度不足提示并要求二次确认后方写入打卡记录
 
 验证
 - npm run typecheck：通过，零错误
