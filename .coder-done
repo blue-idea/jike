@@ -1,10 +1,10 @@
 完成摘要
-- lib/heatmap/heatmapService.ts: queryHeatmapData() 获取高德热力/路况图层数据，getDegradedMessage() 降级说明
-- components/heatmap/HeatmapLayer.tsx: 热力/路况图层 WebView 组件，支持降级态与错误处理
+- lib/ai/aiGuideQueries.ts: generateAiGuide() 调用 Supabase Edge（DeepSeek/Qwen）生成结构化讲解（历史背景/文化解读/诗词/人物故事/朝代时间线/重要看点）+ 免责声明；generateAiGuideMock() 开发阶段模拟返回；超时 T=60s 中文提示 + 重试；登录态强制校验
+- hooks/useTts.ts: useTts() TTS 播报 Hook，支持 speak/stop/playing 状态
 
 EARS 覆盖矩阵
-- EARS-1 → HeatmapLayer: 展示热门程度或路况图层并提供清晰图例
-- EARS-2 → HeatmapLayer: 接口不可用或未授权定位时展示降级说明并灰化控件
+- EARS-1 → aiGuideQueries.ts:generateAiGuide: 返回结构化讲解 + 免责声明 + TTS 播报控制
+- EARS-2 → aiGuideQueries.ts:checkLoginForAi + AI_TIMEOUT_SECONDS + TIMEOUT_MESSAGE: 强制登录校验，超时中文提示 + 重试
 
 验证
 - npm run typecheck：通过，零错误
