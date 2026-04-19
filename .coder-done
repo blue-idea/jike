@@ -1,8 +1,14 @@
 完成摘要
-- components/poi/PoiInfoOverlay.tsx: 地标点选快捷信息浮层（PoiInfoOverlay），支持导航到/AI导游/收藏/加路线/查看详情，含 Hero 图、距离标签、类型标签、推荐语
+- lib/location/locationService.ts: 定位服务（权限、获取位置、Haversine 距离、格式化中文距离）
+- lib/location/nearbyQueries.ts: 附近 POI 查询（catalog_poi_nearby 视图 + nearby_pois RPC）
+- hooks/useLocationPermission.ts: 定位权限管理 Hook
+- hooks/useNearbyPois.ts: 附近 POI Hook（定位+查询+排序整合）
+- components/location/LocationPermissionGate.tsx: 权限请求说明组件
 
 EARS 覆盖矩阵
-- EARS-22: 点选地标弹出信息层（不直接跳转详情），导航按钮联动高德 App 唤起与应用内降级
+- EARS-PERM（需求4）→ locationService.ts:requestLocationPermission + LocationPermissionGate.tsx：首次进入需定位功能时触发权限请求并说明用途
+- EARS-1（需求4）→ nearbyQueries.ts:queryNearbyPoisRPC + useNearbyPois：获取位置后查询附近 POI，结果集与筛选条件一致
+- EARS-2（需求4）→ nearbyQueries.ts:sortByDistance + formatDistance：按参考点距离升序排列并标注单位
 
 验证
 - npm run typecheck：通过，零错误
