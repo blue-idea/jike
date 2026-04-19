@@ -32,7 +32,11 @@ import {
   type MuseumQueryFormState,
   type ScenicLocationFormState,
 } from '@/lib/catalog/catalogQueryFilters';
-import { queryScenicSpots } from '@/lib/catalog/supabaseCatalogQueries';
+import {
+  queryHeritageSites,
+  queryMuseums,
+  queryScenicSpots,
+} from '@/lib/catalog/supabaseCatalogQueries';
 import {
   GeoLocationFilter,
   MuseumFilterPanel,
@@ -135,6 +139,7 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
         <GeoLocationFilter
           primaryColor={stylesVars.scenicPrimary}
           onApplyQuery={onApplyScenicQuery}
+          showDistrictFilter={false}
         />
       </View>
 
@@ -274,7 +279,56 @@ export function ScenicSearchScreen() {
   );
 }
 
+interface HeritageTypeItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  image: string;
+  tall?: boolean;
+}
+
 export function HeritageDirectoryContent() {
+  const [heritageTypes, setHeritageTypes] = useState<HeritageTypeItem[]>(() => [
+    ...HERITAGE_TYPES,
+  ]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadHeritageData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 使用真实数据库查询
+      const data = await queryHeritageSites({});
+      if (data.length > 0) {
+        // 将查询结果映射为 HERITAGE_TYPES 格式（前4条）
+        const mapped: HeritageTypeItem[] = data.slice(0, 4).map((r, idx) => ({
+          id: r.id,
+          title: r.title,
+          subtitle: r.tags.join(' · ') || r.location || '',
+          image: r.image || HERITAGE_TYPES[idx]?.image || '',
+          tall: idx === 0 || idx === 3,
+        }));
+        setHeritageTypes(mapped);
+      }
+    } catch (e) {
+      // 数据库查询失败时回退到模拟数据
+      console.warn('数据库查询失败，回退到模拟数据:', e);
+      setHeritageTypes([...HERITAGE_TYPES]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHeritageData();
+  }, [loadHeritageData]);
+
+  const type0 = heritageTypes[0];
+  const type1 = heritageTypes[1];
+  const type2 = heritageTypes[2];
+  const type3 = heritageTypes[3];
+
   return (
     <View style={styles.sectionPad}>
       <GeoLocationFilter
@@ -340,78 +394,98 @@ export function HeritageDirectoryContent() {
           <Text style={styles.categoryLabel}>CATEGORY</Text>
         </View>
 
-        <View style={styles.heritageTypeStack}>
-          <ImageBackground
-            source={{ uri: HERITAGE_TYPES[0].image }}
-            imageStyle={styles.heritageImage}
-            style={[styles.heritageTypeCard, styles.heritageWide]}
-          >
-            <LinearGradient
-              colors={['rgba(0,0,0,0.14)', 'rgba(0,0,0,0.74)']}
-              style={styles.heritageOverlay}
-            >
-              <Text style={styles.heritageTypeTitle}>
-                {HERITAGE_TYPES[0].title}
-              </Text>
-              <Text style={styles.heritageTypeSubtitle}>
-                {HERITAGE_TYPES[0].subtitle}
-              </Text>
-            </LinearGradient>
-            <View style={styles.heritageBadge}>
-              <Landmark
-                size={15}
-                color={stylesVars.heritagePrimary}
-                strokeWidth={2.2}
-              />
-            </View>
-          </ImageBackground>
-
-          <View style={styles.heritagePairRow}>
-            {HERITAGE_TYPES.slice(1, 3).map((item) => (
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={stylesVars.heritagePrimary} />
+            <Text style={styles.loadingText}>正在加载重点文保...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.catalogEmptyBox}>
+            <Text style={styles.catalogEmptyTitle}>加载失败</Text>
+            <Text style={styles.catalogEmptyHint}>{error}</Text>
+          </View>
+        ) : (
+          <View style={styles.heritageTypeStack}>
+            {type0 ? (
               <ImageBackground
-                key={item.id}
-                source={{ uri: item.image }}
+                source={{ uri: type0.image }}
                 imageStyle={styles.heritageImage}
-                style={[styles.heritageTypeCard, styles.heritageHalf]}
+                style={[styles.heritageTypeCard, styles.heritageWide]}
               >
                 <LinearGradient
-                  colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
+                  colors={['rgba(0,0,0,0.14)', 'rgba(0,0,0,0.74)']}
                   style={styles.heritageOverlay}
                 >
-                  <Text style={styles.heritageTypeTitle}>{item.title}</Text>
-                  <Text style={styles.heritageTypeSubtitle}>
-                    {item.subtitle}
-                  </Text>
+                  <Text style={styles.heritageTypeTitle}>{type0.title}</Text>
+                  <Text style={styles.heritageTypeSubtitle}>{type0.subtitle}</Text>
                 </LinearGradient>
+                <View style={styles.heritageBadge}>
+                  <Landmark
+                    size={15}
+                    color={stylesVars.heritagePrimary}
+                    strokeWidth={2.2}
+                  />
+                </View>
               </ImageBackground>
-            ))}
-          </View>
+            ) : null}
 
-          <ImageBackground
-            source={{ uri: HERITAGE_TYPES[3].image }}
-            imageStyle={styles.heritageImage}
-            style={[styles.heritageTypeCard, styles.heritageWide]}
-          >
-            <LinearGradient
-              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.68)']}
-              style={styles.heritageOverlay}
-            >
-              <Text style={styles.heritageTypeTitle}>
-                {HERITAGE_TYPES[3].title}
-              </Text>
-              <Text style={styles.heritageTypeSubtitle}>
-                {HERITAGE_TYPES[3].subtitle}
-              </Text>
-            </LinearGradient>
-            <View style={styles.heritageBadge}>
-              <Swords
-                size={15}
-                color={stylesVars.heritagePrimary}
-                strokeWidth={2.1}
-              />
+            <View style={styles.heritagePairRow}>
+              {type1 ? (
+                <ImageBackground
+                  source={{ uri: type1.image }}
+                  imageStyle={styles.heritageImage}
+                  style={[styles.heritageTypeCard, styles.heritageHalf]}
+                >
+                  <LinearGradient
+                    colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
+                    style={styles.heritageOverlay}
+                  >
+                    <Text style={styles.heritageTypeTitle}>{type1.title}</Text>
+                    <Text style={styles.heritageTypeSubtitle}>{type1.subtitle}</Text>
+                  </LinearGradient>
+                </ImageBackground>
+              ) : null}
+              {type2 ? (
+                <ImageBackground
+                  source={{ uri: type2.image }}
+                  imageStyle={styles.heritageImage}
+                  style={[styles.heritageTypeCard, styles.heritageHalf]}
+                >
+                  <LinearGradient
+                    colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
+                    style={styles.heritageOverlay}
+                  >
+                    <Text style={styles.heritageTypeTitle}>{type2.title}</Text>
+                    <Text style={styles.heritageTypeSubtitle}>{type2.subtitle}</Text>
+                  </LinearGradient>
+                </ImageBackground>
+              ) : null}
             </View>
-          </ImageBackground>
-        </View>
+
+            {type3 ? (
+              <ImageBackground
+                source={{ uri: type3.image }}
+                imageStyle={styles.heritageImage}
+                style={[styles.heritageTypeCard, styles.heritageWide]}
+              >
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.68)']}
+                  style={styles.heritageOverlay}
+                >
+                  <Text style={styles.heritageTypeTitle}>{type3.title}</Text>
+                  <Text style={styles.heritageTypeSubtitle}>{type3.subtitle}</Text>
+                </LinearGradient>
+                <View style={styles.heritageBadge}>
+                  <Swords
+                    size={15}
+                    color={stylesVars.heritagePrimary}
+                    strokeWidth={2.1}
+                  />
+                </View>
+              </ImageBackground>
+            ) : null}
+          </View>
+        )}
       </View>
 
       <View style={styles.contentSection}>
@@ -465,12 +539,51 @@ export function MuseumDirectoryContent() {
     ...MUSEUM_CARDS,
   ]);
   const [museumHint, setMuseumHint] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const onApplyMuseumQuery = useCallback((f: MuseumQueryFormState) => {
-    let next = filterMuseumCards([...MUSEUM_CARDS], f);
-    next = sortMuseumCards(next, f.sortBy);
-    setMuseumResults(next);
-    setMuseumHint(formatMuseumResultHint(f, next.length));
+  const loadMuseumData = useCallback(async (f: MuseumQueryFormState) => {
+    setLoading(true);
+    setError(null);
+    try {
+      // 使用真实数据库查询
+      const data = await queryMuseums({
+        province: f.province !== '请选择' ? f.province : undefined,
+        city: f.city !== '请选择' ? f.city : undefined,
+        district: f.district !== '请选择' ? f.district : undefined,
+        sortBy: f.sortBy,
+      });
+      setMuseumResults(data.length > 0 ? data : []);
+      setMuseumHint(formatMuseumResultHint(f, data.length));
+    } catch (e) {
+      // 数据库查询失败时回退到模拟数据
+      console.warn('数据库查询失败，回退到模拟数据:', e);
+      let next = filterMuseumCards([...MUSEUM_CARDS], f);
+      next = sortMuseumCards(next, f.sortBy);
+      setMuseumResults(next);
+      setMuseumHint(formatMuseumResultHint(f, next.length));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const onApplyMuseumQuery = useCallback(
+    (f: MuseumQueryFormState) => {
+      loadMuseumData(f);
+    },
+    [loadMuseumData],
+  );
+
+  // 初始化加载
+  useEffect(() => {
+    loadMuseumData({
+      province: '请选择',
+      city: '请选择',
+      district: '请选择',
+      sortBy: '离我最近',
+      useAutoLocation: false,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -484,7 +597,17 @@ export function MuseumDirectoryContent() {
         <Text style={styles.filterResultHint}>{museumHint}</Text>
       ) : null}
 
-      {museumResults.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={stylesVars.heritagePrimary} />
+          <Text style={styles.loadingText}>正在加载博物馆...</Text>
+        </View>
+      ) : error ? (
+        <View style={styles.catalogEmptyBox}>
+          <Text style={styles.catalogEmptyTitle}>加载失败</Text>
+          <Text style={styles.catalogEmptyHint}>{error}</Text>
+        </View>
+      ) : museumResults.length === 0 ? (
         <View style={styles.catalogEmptyBox}>
           <Text style={styles.catalogEmptyTitle}>暂无符合筛选的博物馆</Text>
           {museumHint ? (

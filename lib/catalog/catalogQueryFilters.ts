@@ -8,11 +8,12 @@ export type ScenicLocationFormState = {
   useAutoLocation: boolean;
 };
 
-export type MuseumQueryFormState = ScenicLocationFormState & {
-  qualityLevel: string;
-  nature: string;
-  freeOnly: boolean;
+export type MuseumQueryFormState = {
+  province: string;
+  city: string;
+  district: string;
   sortBy: string;
+  useAutoLocation: boolean;
 };
 
 const PLACEHOLDER = '请选择';
@@ -65,15 +66,6 @@ export function filterMuseumCards(
     if (!museumProvinceMatches(card, f.province)) return false;
     if (!museumCityMatches(card, f.city)) return false;
     if (!museumDistrictMatches(card, f.district)) return false;
-    if (f.qualityLevel && card.qualityLevel && card.qualityLevel !== f.qualityLevel) {
-      return false;
-    }
-    if (f.nature && card.nature && card.nature !== f.nature) {
-      return false;
-    }
-    if (f.freeOnly && !card.freeEntry) {
-      return false;
-    }
     return true;
   });
 }
@@ -109,14 +101,7 @@ export function formatScenicResultHint(f: ScenicLocationFormState, count: number
 
 export function formatMuseumResultHint(f: MuseumQueryFormState, count: number) {
   const loc = [f.province, f.city, f.district].filter(isChosen).join(' · ');
-  const tags = [
-    f.qualityLevel !== '无级别' ? f.qualityLevel : null,
-    f.nature,
-    f.freeOnly ? '仅免费' : null,
-    f.sortBy,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const tags = [f.sortBy].filter(Boolean).join(' · ');
   const mode = f.useAutoLocation ? '当前定位' : '手动筛选';
   return `共 ${count} 条（${mode}${loc ? ` · ${loc}` : ''}${tags ? ` · ${tags}` : ''}）`;
 }

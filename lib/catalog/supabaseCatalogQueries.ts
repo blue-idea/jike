@@ -6,7 +6,7 @@
  */
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { CULTURE_MAP_DEFAULT_CENTER } from '@/constants/cultureMapData';
-import type { ScenicFeature } from '@/constants/CatalogData';
+import type { MuseumCardItem, ScenicFeature } from '@/constants/CatalogData';
 
 export type CultureMapLayer = 'scenic' | 'heritage' | 'museum';
 
@@ -165,6 +165,190 @@ export async function queryScenicSpots(
         item.tags?.some((t) => t.toLowerCase().includes(kw)),
     );
   }
+
+  return results;
+}
+
+/** 发现页重点文保查询参数 */
+export interface HeritageQueryOptions {
+  province?: string;
+  city?: string;
+  district?: string;
+  era?: string;
+  category?: string;
+  keyword?: string;
+  limit?: number;
+}
+
+/** 发现页博物馆查询参数 */
+export interface MuseumQueryOptions {
+  province?: string;
+  city?: string;
+  district?: string;
+  qualityLevel?: string;
+  nature?: string;
+  keyword?: string;
+  sortBy?: string;
+  limit?: number;
+}
+
+/**
+ * 查询重点文保列表（发现页用）
+ * 数据库列映射: provincial→province, city→city, county→district, batch→label,
+ * era→heritage_type, category→category, recommend, sort, images
+ */
+export async function queryHeritageSites(
+  options: HeritageQueryOptions = {},
+): Promise<MuseumCardItem[]> {
+  const supabase = createClient_();
+  const { province, city, district, era, category, keyword, limit = 100 } = options;
+
+  let q = supabase
+    .from('catalog_heritage_sites')
+    .select(
+      'id,name,era,category,batch,provincial,city,county,address,longitude,latitude,recommend,sort,images',
+    )
+    .limit(limit);
+
+  // 过滤省份
+  if (province && province !== '请选择') {
+    q = q.eq('provincial', province);
+  }
+
+  // 过滤城市
+  if (city && city !== '请选择') {
+    q = q.eq('city', city);
+  }
+
+  // 过滤区县
+  if (district && district !== '请选择') {
+    q = q.eq('county', district);
+  }
+
+  // 过滤年代（era）
+  if (era && era !== '全部') {
+    q = q.eq('era', era);
+  }
+
+  // 过滤类别（category）
+  if (category && category !== '全部') {
+    q = q.eq('category', category);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  if (!data) return [];
+
+  let results: MuseumCardItem[] = data.map((r) => ({
+    id: r.id,
+    title: r.name,
+    location: r.address || [r.provincial, r.city, r.county].filter(Boolean).join(' · ') || '',
+    distance: '',
+    image: r.images?.[0] || '',
+    tags: [
+      r.era ? `${r.era}代` : null,
+      r.category || null,
+      r.batch ? `第${r.batch}批` : null,
+    ].filter(Boolean) as string[],
+    provinceFull: r.provincial || undefined,
+    cityLabel: r.city || undefined,
+    districtLabel: r.county || undefined,
+  }));
+
+  // 关键词搜索（前端过滤）
+  if (keyword && keyword.trim()) {
+    const kw = keyword.toLowerCase();
+    results = results.filter(
+      (item) =>
+        item.title?.toLowerCase().includes(kw) ||
+        item.location?.toLowerCase().includes(kw) ||
+        item.tags?.some((t) => t.toLowerCase().includes(kw)),
+    );
+  }
+
+  return results;
+}
+
+/**
+ * 查询博物馆列表（发现页用）
+ * 数据库列映射: pname→provinceFull, cityname→cityLabel, adname→districtLabel,
+ * lng/lat, quality_level→qualityLevel, nature→nature, recommend, sort, images
+ */
+export async function queryMuseums(
+  options: MuseumQueryOptions = {},
+): Promise<MuseumCardItem[]> {
+  const supabase = createClient_();
+  const { province, city, district, qualityLevel, nature, keyword, sortBy, limit = 100 } = options;
+
+  let q = supabase
+    .from('catalog_museums')
+    .select(
+      'id,name,address,tel,pname,cityname,adname,lng,lat,quality_level,nature,recommend,sort,images',
+    )
+    .limit(limit);
+
+  // 过滤省份
+  if (province && province !== '请选择') {
+    q = q.eq('pname', province);
+  }
+
+  // 过滤城市
+  if (city && city !== '请选择') {
+    q = q.eq('cityname', city);
+  }
+
+  // 过滤区县
+  if (district && district !== '请选择') {
+    q = q.eq('adname', district);
+  }
+
+  // 过滤质量等级
+  if (qualityLevel && qualityLevel !== '无级别') {
+    q = q.eq('quality_level', qualityLevel);
+  }
+
+  // 过滤性质
+  if (nature && nature !== '不限') {
+    q = q.eq('nature', nature);
+  }
+
+  const { data, error } = await q;
+  if (error) throw error;
+  if (!data) return [];
+
+  let results: MuseumCardItem[] = data.map((r) => ({
+    id: r.id,
+    title: r.name,
+    location: r.address || [r.pname, r.cityname, r.adname].filter(Boolean).join(' · ') || '',
+    distance: '',
+    image: r.images?.[0] || '',
+    tags: [
+      r.quality_level ? `${r.quality_level}博物馆` : null,
+      r.nature || null,
+    ].filter(Boolean) as string[],
+    provinceFull: r.pname || undefined,
+    cityLabel: r.cityname || undefined,
+    districtLabel: r.adname || undefined,
+    qualityLevel: r.quality_level || undefined,
+    nature: r.nature || undefined,
+  }));
+
+  // 关键词搜索（前端过滤）
+  if (keyword && keyword.trim()) {
+    const kw = keyword.toLowerCase();
+    results = results.filter(
+      (item) =>
+        item.title?.toLowerCase().includes(kw) ||
+        item.location?.toLowerCase().includes(kw) ||
+        item.tags?.some((t) => t.toLowerCase().includes(kw)),
+    );
+  }
+
+  // 前端排序
+  if (sortBy === '名称排序') {
+    results.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'));
+  }
+  // 离我最近：数据库无坐标距离计算，维持原始顺序（已按 sort 排序）
 
   return results;
 }

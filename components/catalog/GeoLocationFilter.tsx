@@ -32,6 +32,8 @@ type GeoLocationFilterProps = {
   defaultLocation?: LocationValue;
   relocatedLocation?: LocationValue;
   showLevelFilter?: boolean;
+  /** 景区表没有区县字段，默认 true */
+  showDistrictFilter?: boolean;
   /** 根据当前筛选表单执行查询（发现页 A 级景区等） */
   onApplyQuery?: (filters: ScenicLocationFormState) => void;
   queryButtonLabel?: string;
@@ -58,6 +60,7 @@ export function GeoLocationFilter({
   defaultLocation = DEFAULT_LOCATION,
   relocatedLocation = DEFAULT_RELOCATED_LOCATION,
   showLevelFilter = true,
+  showDistrictFilter = true,
   onApplyQuery,
   queryButtonLabel = '查询',
 }: GeoLocationFilterProps) {
@@ -190,6 +193,7 @@ export function GeoLocationFilter({
             </View>
           </TouchableOpacity>
 
+
           <TouchableOpacity
             style={styles.pickerTrigger}
             onPress={() => openPicker('city')}
@@ -204,20 +208,23 @@ export function GeoLocationFilter({
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.pickerTrigger}
-            onPress={() => openPicker('district')}
-            disabled={location.city === '请选择'}
-          >
-            <Text style={styles.pickerLabel}>区县</Text>
-            <View style={styles.pickerValueRow}>
-              <Text style={styles.pickerValue} numberOfLines={1}>
-                {location.district}
-              </Text>
-              <ChevronDown size={14} color={Colors.textMuted} />
-            </View>
-          </TouchableOpacity>
+          {showDistrictFilter ? (
+            <TouchableOpacity
+              style={styles.pickerTrigger}
+              onPress={() => openPicker('district')}
+              disabled={location.city === '请选择'}
+            >
+              <Text style={styles.pickerLabel}>区县</Text>
+              <View style={styles.pickerValueRow}>
+                <Text style={styles.pickerValue} numberOfLines={1}>
+                  {location.district}
+                </Text>
+                <ChevronDown size={14} color={Colors.textMuted} />
+              </View>
+            </TouchableOpacity>
+          ) : null}
         </View>
+
 
         {showLevelFilter && (
           <View style={styles.levelFilterRow}>
@@ -529,9 +536,6 @@ export function MuseumFilterPanel({
   const [pickerType, setPickerType] = useState<PickerType>('province');
 
   // Museum specific filters
-  const [selectedQuality, setSelectedQuality] = useState('一级');
-  const [selectedNature, setSelectedNature] = useState('综合');
-  const [freeOnly, setFreeOnly] = useState(false);
   const [sortBy, setSortBy] = useState('离我最近');
 
   const handleRelocate = () => {
@@ -687,89 +691,6 @@ export function MuseumFilterPanel({
           </TouchableOpacity>
         </View>
 
-        {/* Quality Level Filter */}
-        <View style={museumStyles.filterSection}>
-          <Text style={museumStyles.filterSectionLabel}>质量等级</Text>
-          <View style={museumStyles.tagRow}>
-            {['一级', '二级', '三级', '无级别'].map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  museumStyles.tag,
-                  selectedQuality === tag && [
-                    museumStyles.tagActive,
-                    { backgroundColor: primaryColor },
-                  ],
-                ]}
-                onPress={() => setSelectedQuality(tag)}
-              >
-                <Text
-                  style={[
-                    museumStyles.tagText,
-                    selectedQuality === tag && museumStyles.tagTextActive,
-                  ]}
-                >
-                  {tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Museum Nature Filter */}
-        <View style={museumStyles.filterSection}>
-          <Text style={museumStyles.filterSectionLabel}>博物馆性质</Text>
-          <View style={museumStyles.tagRow}>
-            {['综合', '历史', '艺术', '科技'].map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  museumStyles.tag,
-                  selectedNature === tag && [
-                    museumStyles.tagActive,
-                    { backgroundColor: primaryColor },
-                  ],
-                ]}
-                onPress={() => setSelectedNature(tag)}
-              >
-                <Text
-                  style={[
-                    museumStyles.tagText,
-                    selectedNature === tag && museumStyles.tagTextActive,
-                  ]}
-                >
-                  {tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Free Entry Switch */}
-        <TouchableOpacity
-          style={museumStyles.switchRow}
-          onPress={() => setFreeOnly(!freeOnly)}
-          activeOpacity={0.7}
-        >
-          <View>
-            <Text style={museumStyles.switchLabel}>开放政策</Text>
-            <Text style={museumStyles.switchSubtext}>仅显示免费开放</Text>
-          </View>
-          <View
-            style={[
-              museumStyles.switchTrack,
-              freeOnly && { backgroundColor: primaryColor },
-            ]}
-          >
-            <View
-              style={[
-                museumStyles.switchThumb,
-                freeOnly && museumStyles.switchThumbActive,
-              ]}
-            />
-          </View>
-        </TouchableOpacity>
-
         {/* Sort By */}
         <View style={museumStyles.sortRow}>
           <Text style={museumStyles.sortLabel}>排序方式</Text>
@@ -803,12 +724,8 @@ export function MuseumFilterPanel({
                 province: location.province,
                 city: location.city,
                 district: location.district,
-                level: location.level,
-                useAutoLocation,
-                qualityLevel: selectedQuality,
-                nature: selectedNature,
-                freeOnly,
                 sortBy,
+                useAutoLocation,
               })
             }
           >
