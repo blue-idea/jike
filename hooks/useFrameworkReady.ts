@@ -1,13 +1,12 @@
 import { useEffect } from 'react';
 
 declare global {
-  interface Window {
-    frameworkReady?: () => void;
-  }
+  // RN Hermes 无 `window`；浏览器里 globalThis 与 window 等价，统一用 globalThis 避免冷启动 effect 抛错。
+  var frameworkReady: (() => void) | undefined;
 }
 
 export function useFrameworkReady() {
   useEffect(() => {
-    window.frameworkReady?.();
-  });
+    globalThis.frameworkReady?.();
+  }, []);
 }

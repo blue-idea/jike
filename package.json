@@ -57,7 +57,6 @@
     "eslint-config-expo": "~10.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
-    "typescript": "~5.9.2",
-    "@e965/xlsx": "^0.20.3"
+    "typescript": "~5.9.2"
   }
 }
