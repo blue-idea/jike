@@ -28,8 +28,9 @@ function AuthNavigationShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!initialized) return;
 
-    const root = segments[0];
-    const leaf = segments[1];
+    const path = segments as string[];
+    const root = path[0];
+    const leaf = path[1];
     const inAuth = root === '(auth)';
     const inTabs = root === '(tabs)';
 
