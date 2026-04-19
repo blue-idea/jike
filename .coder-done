@@ -1,10 +1,9 @@
 完成摘要
-- lib/ai/aiQaQueries.ts: sendQaQuestion() Edge 调用封装，返回文化领域回答 + 免责声明；sendQaQuestionMock() 开发阶段降级；网络错误标记 [OFFLINE] 用于触发离线保留
-- hooks/useQa.ts: useQa() 状态管理 Hook，支持 ask/retry/reset；离线队列持久化到 AsyncStorage，网络恢复时可 flushOfflineQueue 重发
+- lib/travel/travelService.ts: 轨迹记录（saveTravelSession/getLocalTravelSessions/addPointToSession/associatePoiToSession）、AI 游记生成（generateTravelJournal/generateTravelJournalMock）、游记云端保存（saveTravelJournalToCloud）
 
 EARS 覆盖矩阵
-- EARS-1 → sendQaQuestion: 文化领域回答 + 免责声明
-- EARS-2 → useQa: 离线输入保留到 AsyncStorage，网络恢复后 flushOfflineQueue 重发；超时 T 秒中文提示 + 重试
+- EARS-1 → travelService: 轨迹采样点记录、POI 关联、AI 游记草稿生成
+- EARS-2 → travelService: 未登录本地保存，云端 AI 生成须登录态
 
 验证
 - npm run typecheck：通过，零错误
