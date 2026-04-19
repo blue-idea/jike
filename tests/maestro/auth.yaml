@@ -1,0 +1,41 @@
+# tests/maestro/auth.yaml
+# Maestro E2E 测试：认证流程
+
+appId: com.jike.app
+
+---
+- launchApp
+- waitForTimeout: 2000
+
+# 未登录状态下应该停留在登录页
+- assertVisible: "登录"
+
+# 尝试注册流程
+- tapOn: "注册"
+- waitForTimeout: 1000
+- inputText:
+    text: "test@example.com"
+    index: 0
+- waitForTimeout: 500
+- inputText:
+    text: "Test123456"
+    index: 1
+- tapOn: "注册"
+- waitForTimeout: 2000
+
+# 回到登录
+- tapOn: "去登录"
+- waitForTimeout: 1000
+
+# 正常登录
+- inputText:
+    text: "test@example.com"
+    index: 0
+- inputText:
+    text: "Test123456"
+    index: 1
+- tapOn: "登录"
+- waitForTimeout: 3000
+
+# 登录后应该进入主 Tab
+- assertVisible: "首页"

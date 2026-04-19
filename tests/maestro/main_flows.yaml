@@ -1,0 +1,33 @@
+# tests/maestro/main_flows.yaml
+# Maestro E2E 测试：主要 Tab 切换与核心流程
+
+appId: com.jike.app
+
+---
+- launchApp
+- waitForTimeout: 2000
+
+# 底部 Tab 切换
+- tapOn: "首页"
+- waitForTimeout: 1000
+- assertVisible: "首页"
+
+- tapOn: "发现"
+- waitForTimeout: 1000
+- assertVisible: "发现"
+
+- tapOn: "路线"
+- waitForTimeout: 1000
+- assertVisible: "路线"
+
+- tapOn: "工具"
+- waitForTimeout: 1000
+- assertVisible: "工具"
+
+- tapOn: "我的"
+- waitForTimeout: 1000
+- assertVisible: "我的"
+
+# 返回首页
+- tapOn: "首页"
+- waitForTimeout: 1000

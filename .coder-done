@@ -1,11 +1,12 @@
 完成摘要
-- lib/auth/authErrors.ts: 统一认证错误中文映射（不暴露内部错误详情），脱敏函数 maskEmail/maskUserId/isSessionExpiredError
-- hooks/useAuthSession.ts: 定期 token 刷新 Hook（30分钟检查，session 过期前 5 分钟主动刷新）
-- scripts/migrations/002_rls_policies.sql: RLS 策略 SQL（用户数据/收藏/打卡/印章/成就/游记按 auth.uid() 隔离，名录表公开只读）
+- components/error/ErrorState.tsx: 统一错误展示组件（网络/超时/服务器/未知错误分类，中文提示，重试按钮）
+- lib/error/timeoutMiddleware.ts: withTimeoutAndRetry() 超时与重试中间件（默认 T=60s，指数退避），callWithRetry()
+- tests/maestro/auth.yaml: 认证流程 E2E 测试
+- tests/maestro/main_flows.yaml: 主要 Tab 切换 E2E 测试
+- tests/maestro/ai_guide.yaml: AI 导游 E2E 测试
 
 EARS 覆盖矩阵
-- EARS-19: 认证错误文案统一（authErrors.ts），敏感日志脱敏（maskEmail/maskUserId），会话刷新（useAuthSession.ts）
-- EARS-20: RLS 策略覆盖所有用户数据表，启用 auth.uid() 行级隔离
+- EARS-21: 统一错误处理规范，AI 类请求超时 T 秒中文说明 + 重试，Maestro 回归套件
 
 验证
 - npm run typecheck：通过，零错误
