@@ -237,9 +237,7 @@ export default function PoiDetailScreen() {
     );
   }
 
-  const heroImage = detail.images?.[0]
-    ? { uri: detail.images[0] }
-    : require('@/assets/images/placeholder.png');
+  const heroUrl = detail.images?.[0];
 
   return (
     <View style={styles.wrap}>
@@ -263,11 +261,11 @@ export default function PoiDetailScreen() {
         }
       >
         {/* Hero 图 */}
-        <Image
-          source={heroImage}
-          style={styles.heroImage}
-          resizeMode="cover"
-        />
+        {heroUrl ? (
+          <Image source={{ uri: heroUrl }} style={styles.heroImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.heroImage} accessibilityRole="image" accessibilityLabel="无封面图" />
+        )}
 
         {/* 基础信息 */}
         <View style={styles.baseInfo}>
