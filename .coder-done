@@ -1,10 +1,10 @@
 完成摘要
-- lib/ai/aiItineraryQueries.ts: generateItinerary() Edge 调用封装，generateItineraryMock() 开发阶段降级，regenerateItinerary() 偏好调整再生，支持多日行程 + POI 约束 + 超时 T=60s
-- hooks/useItinerary.ts: useItinerary() 状态管理 Hook，支持 generate/regenerate/addStop/removeStop/retry/reset
+- lib/ai/aiPhotoQueries.ts: recognizePhoto() Edge 调用封装（上传 Storage → 多模态识别 → 候选置信度），recognizePhotoMock() 开发阶段降级，mapErrorToChinese() 中文错误映射
+- hooks/usePhotoRecognition.ts: usePhotoRecognition() 状态管理 Hook，支持 recognize/retry/reset
 
 EARS 覆盖矩阵
-- EARS-1 → generateItinerary: 自然语言偏好解析，多日行程草案，手动增删点
-- EARS-2 → aiItineraryQueries.ts: 超时 T 秒中文提示 + 重试机制
+- EARS-1 → recognizePhoto: 多模态识别 + 名录约束 + 候选置信度 + 可跳转详情/AI 导览
+- EARS-2 → aiPhotoQueries.ts: 超时 T 秒中文提示 + 重试机制
 
 验证
 - npm run typecheck：通过，零错误
