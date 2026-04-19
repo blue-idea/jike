@@ -1,17 +1,25 @@
+/**
+ * components/collection/CultureMapView.tsx
+ *
+ * 文化地图视图（WebView + 高德 JSAPI）
+ * 数据源：严格仅来自 Supabase 三类名录 POI（不得混入高德原生 POI）
+ *
+ * EARS-1 覆盖：切换图层 → queryMapPois 更新点位集合 → 同步图例说明
+ * EARS-2 覆盖：网络异常时显示 MapErrorState + 支持重试
+ */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import {
   CULTURE_MAP_DEFAULT_CENTER,
   CULTURE_MAP_DEFAULT_STYLE,
   CULTURE_MAP_FEATURES,
-  CULTURE_MAP_POIS,
-  type CultureMapLayer,
 } from '@/constants/cultureMapData';
+import { MapErrorState } from '@/components/catalog/MapErrorState';
+import { queryMapPois, type CultureMapLayer, type MapPoi } from '@/lib/catalog/supabaseCatalogQueries';
 
 export type CultureMapViewProps = {
   activeLayer: CultureMapLayer;
-  /** A 级景区图层下：全部 A 级或仅 5A */
   scenicFilter: 'all' | '5A';
 };
 
@@ -25,10 +33,22 @@ function getMapStyleUri(): string {
   return custom && custom.length > 0 ? custom : CULTURE_MAP_DEFAULT_STYLE;
 }
 
-function buildMapHtml(amapKey: string, mapStyleUri: string) {
-  const { lng: centerLng, lat: centerLat } = CULTURE_MAP_DEFAULT_CENTER;
-  const poisJson = JSON.stringify(CULTURE_MAP_POIS);
-  const featuresJson = JSON.stringify([...CULTURE_MAP_FEATURES]);
+function buildMapHtml(
+  amapKey: string,
+  mapStyleUri: string,
+  pois: MapPoi[],
+  center: { lng: number; lat: number },
+) {
+  const poisJson = JSON.stringify(
+    pois.map((p) => ({
+      id: p.id,
+      name: p.name,
+      kind: p.kind,
+      lng: p.lng,
+      lat: p.lat,
+      scenicLevel: p.scenicLevel ?? null,
+    })),
+  );
   const styleJson = JSON.stringify(mapStyleUri);
 
   return `<!DOCTYPE html>
@@ -47,7 +67,6 @@ function buildMapHtml(amapKey: string, mapStyleUri: string) {
   <script>
     (function () {
       var POIS = ${poisJson};
-      var FEATURES = ${featuresJson};
       var mapStyleUri = ${styleJson};
       var map;
       var markerList = [];
@@ -66,26 +85,19 @@ function buildMapHtml(amapKey: string, mapStyleUri: string) {
         return '#C8914A';
       }
 
-      function filterPois(layer, scenicFilter) {
-        return POIS.filter(function (p) {
+      function renderPois(layer, scenicFilter) {
+        map.remove(markerList);
+        markerList = [];
+        var filtered = POIS.filter(function (p) {
           if (layer === 'heritage') return p.kind === 'heritage';
           if (layer === 'museum') return p.kind === 'museum';
           if (layer === 'scenic') {
-            if (scenicFilter === '5A') {
-              return p.kind === 'scenic' && p.scenicLevel === '5A';
-            }
+            if (scenicFilter === '5A') return p.kind === 'scenic' && p.scenicLevel === '5A';
             return p.kind === 'scenic';
           }
           return true;
         });
-      }
-
-      function applyLayer(layer, scenicFilter) {
-        if (!map) return;
-        map.remove(markerList);
-        markerList = [];
-        var list = filterPois(layer, scenicFilter || 'all');
-        list.forEach(function (p) {
+        filtered.forEach(function (p) {
           var m = new AMap.Marker({
             position: [p.lng, p.lat],
             title: p.name,
@@ -99,26 +111,29 @@ function buildMapHtml(amapKey: string, mapStyleUri: string) {
           if (markerList.length) {
             map.setFitView(markerList, false, [52, 52, 52, 52], 14);
           } else {
-            map.setZoomAndCenter(11, [${centerLng}, ${centerLat}]);
+            map.setZoomAndCenter(11, [${center.lng}, ${center.lat}]);
           }
         } catch (e) {}
       }
 
-      window.__applyLayer = applyLayer;
+      window.__renderPois = renderPois;
 
       map = new AMap.Map('container', {
         zoom: 12,
-        center: [${centerLng}, ${centerLat}],
+        center: [${center.lng}, ${center.lat}],
         mapStyle: mapStyleUri,
         viewMode: '2D',
       });
-      try {
-        map.setFeatures(FEATURES);
-      } catch (e) {}
+      try { map.setFeatures(FEATURES); } catch (e) {}
 
       map.on('complete', function () {
         if (window.ReactNativeWebView) {
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
+        }
+      });
+      map.on('error', function (e) {
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'error', msg: String(e) }));
         }
       });
     })();
@@ -139,7 +154,7 @@ function buildPlaceholderHtml() {
     padding: 16px; text-align: center; font-size: 13px; line-height: 1.55;
   }
 </style></head><body>
-  <div>请配置环境变量 <b>EXPO_PUBLIC_AMAP_KEY</b> 后重新加载，即可显示高德文化地图底图与周边点位。</div>
+  <div>请配置环境变量 <b>EXPO_PUBLIC_AMAP_KEY</b> 后重新加载。</div>
 </body></html>`;
 }
 
@@ -147,38 +162,54 @@ export function CultureMapView({ activeLayer, scenicFilter }: CultureMapViewProp
   const isWeb = Platform.OS === 'web';
   const webRef = useRef<WebView>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [pois, setPois] = useState<MapPoi[]>([]);
+
   const amapKey = useMemo(() => getWebApiKey(), []);
   const mapStyleUri = useMemo(() => getMapStyleUri(), []);
-  const filteredPois = useMemo(() => {
-    return CULTURE_MAP_POIS.filter((p) => {
-      if (activeLayer === 'heritage') return p.kind === 'heritage';
-      if (activeLayer === 'museum') return p.kind === 'museum';
-      if (activeLayer === 'scenic') {
-        if (scenicFilter === '5A') return p.kind === 'scenic' && p.scenicLevel === '5A';
-        return p.kind === 'scenic';
-      }
-      return true;
-    });
-  }, [activeLayer, scenicFilter]);
 
-  const html = useMemo(
-    () => (amapKey ? buildMapHtml(amapKey, mapStyleUri) : buildPlaceholderHtml()),
-    [amapKey, mapStyleUri],
+  // EARS-1: 切换图层/筛选 → 查询 Supabase POI
+  const loadPois = useCallback(
+    async (layer: CultureMapLayer, sf: 'all' | '5A') => {
+      setIsLoading(true);
+      setLoadError(false);
+      try {
+        const data = await queryMapPois(layer, sf === '5A' ? '5A' : 'all');
+        setPois(data);
+      } catch {
+        setLoadError(true);
+        setPois([]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [],
   );
 
-  const injectLayer = useCallback(() => {
+  useEffect(() => {
+    loadPois(activeLayer, scenicFilter);
+  }, [activeLayer, scenicFilter, loadPois]);
+
+  const html = useMemo(() => {
+    if (!amapKey) return buildPlaceholderHtml();
+    return buildMapHtml(amapKey, mapStyleUri, pois, CULTURE_MAP_DEFAULT_CENTER);
+  }, [amapKey, mapStyleUri, pois]);
+
+  // EARS-1: 图层就绪后注入点位
+  const injectPois = useCallback(() => {
     const layer = JSON.stringify(activeLayer);
     const sf = JSON.stringify(scenicFilter);
     const code = `(function(){
-      if (window.__applyLayer) window.__applyLayer(${layer}, ${sf});
+      if (window.__renderPois) window.__renderPois(${layer}, ${sf});
     })();true;`;
     webRef.current?.injectJavaScript(code);
   }, [activeLayer, scenicFilter]);
 
   useEffect(() => {
-    if (!amapKey || !mapReady) return;
-    injectLayer();
-  }, [amapKey, mapReady, injectLayer]);
+    if (!amapKey || !mapReady || pois.length === 0) return;
+    injectPois();
+  }, [amapKey, mapReady, pois, injectPois]);
 
   const onMessage = useCallback((ev: { nativeEvent: { data: string } }) => {
     try {
@@ -189,31 +220,38 @@ export function CultureMapView({ activeLayer, scenicFilter }: CultureMapViewProp
     }
   }, []);
 
-  useEffect(() => {
+  const onError = useCallback(() => {
+    // EARS-2: WebView 加载失败 → 显示错误态
+    setLoadError(true);
     setMapReady(false);
-  }, [html]);
+  }, []);
+
+  const onRetry = useCallback(() => {
+    setLoadError(false);
+    loadPois(activeLayer, scenicFilter);
+  }, [activeLayer, scenicFilter, loadPois]);
+
+  // EARS-2: 网络异常态
+  if (loadError) {
+    return (
+      <View style={styles.wrap}>
+        <MapErrorState onRetry={onRetry} />
+      </View>
+    );
+  }
 
   if (isWeb) {
     return (
       <View style={styles.wrap}>
         <View style={styles.webFallback}>
-          <Text style={styles.webFallbackTitle}>Web 预览模式</Text>
-          <Text style={styles.webFallbackDesc}>
-            当前浏览器端不支持 `react-native-webview`，已降级为点位列表预览。
-          </Text>
-          <Text style={styles.webFallbackMeta}>
-            当前图层：{activeLayer === 'heritage' ? '文保' : activeLayer === 'museum' ? '博物馆' : scenicFilter === '5A' ? 'A级景区（仅5A）' : 'A级景区（全部）'}
-          </Text>
-          <View style={styles.poiList}>
-            {filteredPois.map((poi) => (
-              <View key={poi.id} style={styles.poiItem}>
-                <Text style={styles.poiName}>{poi.name}</Text>
-                <Text style={styles.poiCoord}>
-                  {poi.lat.toFixed(4)}, {poi.lng.toFixed(4)}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <WebView
+            source={{ html, baseUrl: 'https://m.amap.com' }}
+            style={styles.web}
+            originWhitelist={['*']}
+            javaScriptEnabled
+            onMessage={onMessage}
+            onError={onError}
+          />
         </View>
       </View>
     );
@@ -221,6 +259,11 @@ export function CultureMapView({ activeLayer, scenicFilter }: CultureMapViewProp
 
   return (
     <View style={styles.wrap}>
+      {isLoading && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <View style={styles.spinner} />
+        </View>
+      )}
       <WebView
         ref={webRef}
         source={{ html, baseUrl: 'https://m.amap.com' }}
@@ -234,7 +277,7 @@ export function CultureMapView({ activeLayer, scenicFilter }: CultureMapViewProp
         showsVerticalScrollIndicator={false}
         scrollEnabled={false}
         onMessage={onMessage}
-        // Android 需要允许高德脚本
+        onError={onError}
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
       />
@@ -255,43 +298,25 @@ const styles = StyleSheet.create({
   },
   webFallback: {
     flex: 1,
-    padding: 14,
     backgroundColor: '#F7F3EC',
   },
-  webFallbackTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1A1603',
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(247,243,236,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
-  webFallbackDesc: {
-    marginTop: 6,
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#5C5040',
-  },
-  webFallbackMeta: {
-    marginTop: 8,
-    fontSize: 11,
-    color: '#9A8A78',
-  },
-  poiList: {
-    marginTop: 10,
-    gap: 6,
-  },
-  poiItem: {
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  poiName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1A1603',
-  },
-  poiCoord: {
-    marginTop: 2,
-    fontSize: 10,
-    color: '#9A8A78',
+  spinner: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: '#C8914A',
+    borderTopColor: 'transparent',
   },
 });
