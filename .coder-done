@@ -1,10 +1,10 @@
 完成摘要
-- lib/ai/aiGuideQueries.ts: generateAiGuide() 调用 Supabase Edge（DeepSeek/Qwen）生成结构化讲解（历史背景/文化解读/诗词/人物故事/朝代时间线/重要看点）+ 免责声明；generateAiGuideMock() 开发阶段模拟返回；超时 T=60s 中文提示 + 重试；登录态强制校验
-- hooks/useTts.ts: useTts() TTS 播报 Hook，支持 speak/stop/playing 状态
+- lib/ai/aiItineraryQueries.ts: generateItinerary() Edge 调用封装，generateItineraryMock() 开发阶段降级，regenerateItinerary() 偏好调整再生，支持多日行程 + POI 约束 + 超时 T=60s
+- hooks/useItinerary.ts: useItinerary() 状态管理 Hook，支持 generate/regenerate/addStop/removeStop/retry/reset
 
 EARS 覆盖矩阵
-- EARS-1 → aiGuideQueries.ts:generateAiGuide: 返回结构化讲解 + 免责声明 + TTS 播报控制
-- EARS-2 → aiGuideQueries.ts:checkLoginForAi + AI_TIMEOUT_SECONDS + TIMEOUT_MESSAGE: 强制登录校验，超时中文提示 + 重试
+- EARS-1 → generateItinerary: 自然语言偏好解析，多日行程草案，手动增删点
+- EARS-2 → aiItineraryQueries.ts: 超时 T 秒中文提示 + 重试机制
 
 验证
 - npm run typecheck：通过，零错误
