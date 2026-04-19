@@ -1,9 +1,9 @@
 完成摘要
-- lib/checkin/checkinService.ts: 地理围栏打卡（500m）、印章体系（6种印章）、成就规则引擎（打卡次数成就）、精度不足二次确认、打卡记录/印章/成就查询
+- lib/favorites/favoritesService.ts: 收藏/想去/已去 CRUD，清空操作，各类统计查询，removeFromAllFavorites 批量删除
 
 EARS 覆盖矩阵
-- EARS-1 → checkIn: 500m 围栏判定、印章发放、足迹热力
-- EARS-2 → checkIn: 定位精度不足提示并要求二次确认后方写入打卡记录
+- EARS-1 → addFavorite/getFavorites: 统一写入 Supabase，个人中心分类展示
+- EARS-2 → clearFavorites: 清空操作（删除 + 列表刷新），二次确认由调用方 UI 处理
 
 验证
 - npm run typecheck：通过，零错误
