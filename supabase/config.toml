@@ -1,0 +1,22 @@
+# Supabase CLI 本地配置（迁移与 db 命令用）。云端项目 ID 以 Dashboard 为准。
+# 文档：https://supabase.com/docs/guides/cli/config
+
+project_id = "jike"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true

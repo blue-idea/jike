@@ -7,6 +7,11 @@ export interface ScenicFeature {
   distance?: string;
   rating?: string;
   badge?: string;
+  /** 与筛选表单「省 / 市 / 区县 / A 级」对齐，便于发现页查询演示 */
+  province?: string;
+  city?: string;
+  district?: string;
+  level?: string;
 }
 
 export interface MuseumCardItem {
@@ -16,6 +21,13 @@ export interface MuseumCardItem {
   distance: string;
   image: string;
   tags: string[];
+  /** 与 GeoLocationFilter 省市区选项一致 */
+  provinceFull?: string;
+  cityLabel?: string;
+  districtLabel?: string;
+  qualityLevel?: string;
+  nature?: string;
+  freeEntry?: boolean;
 }
 
 export const SCENIC_CATEGORY_TABS = [
@@ -39,6 +51,10 @@ export const SCENIC_FEATURED: ScenicFeature[] = [
       'https://lh3.googleusercontent.com/aida-public/AB6AXuDvAN_6bWlc5fjPTLnjhqTbScs0nWulfJ88Ncjx3YYfQc_iyT4nQN90IKGne5vAVM-cHf3xoG24r0dulmEGBhx4V6wXLS5D3sZS1ooBHcVXLuqZf-YV_KVWlNWjWPXyYYvzI7HdpdEGQZsif-xXSkx3y0OQC1tv5bau5SIyQRqhfHRuNDqhhDzGEdrQgzPq6Khz-XdahGFMNK73_6s6o0JS7Kc1mmW2q5voTpoFAcc9jhaNMijZFBhnQ6yIZVO82-rOakRNAoG4xOY',
     tags: ['Top Rated', 'AAAAA级'],
     distance: '4.8km',
+    province: '陕西省',
+    city: '西安市',
+    district: '雁塔区',
+    level: '5A',
   },
   {
     id: 'beilin',
@@ -49,6 +65,10 @@ export const SCENIC_FEATURED: ScenicFeature[] = [
     tags: ['石刻', '全国重点'],
     distance: '1.2km',
     rating: '4.9',
+    province: '陕西省',
+    city: '西安市',
+    district: '碑林区',
+    level: '5A',
   },
   {
     id: 'xiaoyanta',
@@ -59,6 +79,10 @@ export const SCENIC_FEATURED: ScenicFeature[] = [
     tags: ['古建筑', 'AAAA级'],
     distance: '3.5km',
     rating: '4.7',
+    province: '陕西省',
+    city: '西安市',
+    district: '碑林区',
+    level: '4A',
   },
 ];
 
@@ -120,6 +144,12 @@ export const MUSEUM_CARDS: MuseumCardItem[] = [
     image:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuAGmOmdc0Dc--7WkV05BQ4gj2Nk5VrsxINzaBkDAsshr7hvxTvVwN4XCvdA0aCMO62E5JP1CdJN2gyKdVq8PqlUfmo1Lwb6M62QMseJlku1_o_eqLyWBZg-vbUtcq-HunJgJE1ltCVisW1AdR1CMIGoz2DG9S6Ei7irdTvymcoon4obJhxBF2rXgaexaYPRGdOkWBHw62Wv1yoS6vg1ale-eu8-Cy3ds_r0Ch3f4mMc2VOBquwI0NDUqe4jzglFw_kMlom9YRU1JrE',
     tags: ['一级博物馆', '免费'],
+    provinceFull: '北京市',
+    cityLabel: '北京市',
+    districtLabel: '东城区',
+    qualityLevel: '一级',
+    nature: '综合',
+    freeEntry: true,
   },
   {
     id: 'forbidden',
@@ -129,6 +159,12 @@ export const MUSEUM_CARDS: MuseumCardItem[] = [
     image:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuCcACBzTjb99ZpgCqDO_aCAfY29uIJpnNVgtFp48oAIG9B_0M-eMBowuOOTiMSCrZ4HwgPnmt-lzGyIm_BOdhJmrjqZ-ZFd5dBWSTydShhtbUPcyl5uHmKS23NCqYdk9SXg8_qAh7-wwArHBQWqEpEJ_r_YkLhC7Z01cQYKa_Ur5F-GijsUEtCcpkunDXF3BZMco7KCxKio8q_H-9Ib-dJ4PAiW9BCwKIhEUxEhrrZ1FsPppHEt0KMpg4YZ9_vMlqp5QsIgIL9xqGk',
     tags: ['一级博物馆'],
+    provinceFull: '北京市',
+    cityLabel: '北京市',
+    districtLabel: '东城区',
+    qualityLevel: '一级',
+    nature: '历史',
+    freeEntry: false,
   },
   {
     id: 'nanjing',
@@ -138,6 +174,12 @@ export const MUSEUM_CARDS: MuseumCardItem[] = [
     image:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuBjtg6Q4FCcnj1_FlYdTISf8E8XwutH1wphfbZkCwbjbnmb4u8kzmU_MO0UoOwk4dN2zt4tPlQ_uBLB8k2j2PRKBKgCBF-VvNaQgImS_tI8qoXwbz637tAoIzs_ccEpKzT42hsjsrhAtudXiZfyG0RS6oW0eqKLeR7oYJnpc9DrBqOXO1NmTjX3TGmRfiNCqxiy-ZGDOWilTTlAYopz7N4ZWCwhrzBHvG5pN6MhnfnwMLGflGk0qa-uXrQaa-IuzX0cajJHhP3Y7gA',
     tags: ['一级博物馆', '免费'],
+    provinceFull: '江苏省',
+    cityLabel: '南京市',
+    districtLabel: '玄武区',
+    qualityLevel: '一级',
+    nature: '历史',
+    freeEntry: true,
   },
   {
     id: 'xian',
@@ -147,6 +189,12 @@ export const MUSEUM_CARDS: MuseumCardItem[] = [
     image:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuDh2FKxvsAREOlEQ4-XNT5j-Va8susrSA41SwiDpHWcBOrOQ0Nt2L5t2y_IS3HdpSu5TDyiPJowfdITDjoiF4ACkFhE2MhUXK9LuhqePsaXB29qFaT8r_wPCFjK7cjH3_IvKUEA-vTWjpUJuURI8x45eDH-IodU-uP17mxLv2EGzSWq7BUvKtvtsKWsd6Y9hJ8x51QbIeCqUeSXswUNbcHKVQ74GPcRHB2d2KqP17DKEwjktmqgfY5aNmmyMVY6f_FB7ZjTeAWxKnk',
     tags: ['二级博物馆', '免费'],
+    provinceFull: '陕西省',
+    cityLabel: '西安市',
+    districtLabel: '碑林区',
+    qualityLevel: '二级',
+    nature: '综合',
+    freeEntry: true,
   },
   {
     id: 'shanghai',
@@ -156,56 +204,17 @@ export const MUSEUM_CARDS: MuseumCardItem[] = [
     image:
       'https://lh3.googleusercontent.com/aida-public/AB6AXuCbEFcH385R3PXk0WHxwpuxXXuaqsQnvovgge8fyz_CYm0Nv7EwYQYbpRUo9DtxEPy7CputTqBpFO6GFfUix3cRSebR0-J04SEc0ShwbYgxM-JToueLbWITCrPOwzp1RVG-UuOP8qEI2xBC0K_Vrmg5W8uBkYb_GkwBeRPaeXuoChjsWKYot-G8WCxH1eazpX9NTOjNOIHtRZsKvxrdPg9Lqnkfk9s08I3U3xBOVog1nIcKg5TiH_geCALfvsO0M-15w534CNr95G8',
     tags: ['一级博物馆'],
+    provinceFull: '上海市',
+    cityLabel: '上海市',
+    districtLabel: '黄浦区',
+    qualityLevel: '一级',
+    nature: '艺术',
+    freeEntry: false,
   },
 ];
 
-export const CHINA_REGIONS = [
-  {
-    name: '陕西省',
-    cities: [
-      {
-        name: '西安市',
-        districts: ['碑林区', '雁塔区', '未央区', '莲湖区', '新城区', '灞桥区'],
-      },
-      {
-        name: '咸阳市',
-        districts: ['秦都区', '渭城区', '杨陵区'],
-      },
-      {
-        name: '宝鸡市',
-        districts: ['渭滨区', '金台区', '陈仓区'],
-      },
-    ],
-  },
-  {
-    name: '北京市',
-    cities: [
-      {
-        name: '北京市',
-        districts: ['东城区', '西城区', '朝阳区', '丰台区', '石景山区', '海淀区'],
-      },
-    ],
-  },
-  {
-    name: '江苏省',
-    cities: [
-      {
-        name: '南京市',
-        districts: ['玄武区', '秦淮区', '建邺区', '鼓楼区', '浦口区'],
-      },
-      {
-        name: '苏州市',
-        districts: ['虎丘区', '吴中区', '相城区', '姑苏区'],
-      },
-    ],
-  },
-  {
-    name: '上海市',
-    cities: [
-      {
-        name: '上海市',
-        districts: ['黄浦区', '徐汇区', '长宁区', '静安区', '普陀区'],
-      },
-    ],
-  },
-];
+export {
+  CHINA_REGIONS,
+  type ChinaRegionCity,
+  type ChinaRegionProvince,
+} from './chinaRegions.generated';

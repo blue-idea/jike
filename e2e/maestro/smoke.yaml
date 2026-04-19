@@ -1,9 +1,10 @@
-# 集刻 · Maestro 冒烟：冷启动后校验首页主体内容可见（与 app.json android.package 一致）
+# 集刻 · Maestro 冒烟：冷启动后未登录应落在认证门禁（任务 3 / 需求 15–16）
 appId: com.manbudezhu.boltexponativewind
 ---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "探寻文化踪迹"
+    visible: "欢迎回来"
     timeout: 120000
-- assertVisible: "探寻文化踪迹"
+- assertVisible: "欢迎回来"
+- assertVisible: "登录"

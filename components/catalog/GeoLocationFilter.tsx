@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native';
 import { CHINA_REGIONS } from '@/constants/CatalogData';
 import { Colors } from '@/constants/Colors';
+import type { MuseumQueryFormState, ScenicLocationFormState } from '@/lib/catalog/catalogQueryFilters';
 
 type PickerType = 'province' | 'city' | 'district' | 'level';
 
@@ -31,6 +32,9 @@ type GeoLocationFilterProps = {
   defaultLocation?: LocationValue;
   relocatedLocation?: LocationValue;
   showLevelFilter?: boolean;
+  /** 根据当前筛选表单执行查询（发现页 A 级景区等） */
+  onApplyQuery?: (filters: ScenicLocationFormState) => void;
+  queryButtonLabel?: string;
 };
 
 const DEFAULT_LOCATION: LocationValue = {
@@ -54,6 +58,8 @@ export function GeoLocationFilter({
   defaultLocation = DEFAULT_LOCATION,
   relocatedLocation = DEFAULT_RELOCATED_LOCATION,
   showLevelFilter = true,
+  onApplyQuery,
+  queryButtonLabel = '查询',
 }: GeoLocationFilterProps) {
   const [isLocating, setIsLocating] = useState(false);
   const [useAutoLocation, setUseAutoLocation] = useState(true);
@@ -227,6 +233,24 @@ export function GeoLocationFilter({
             </TouchableOpacity>
           </View>
         )}
+
+        {onApplyQuery ? (
+          <TouchableOpacity
+            style={[filterActionStyles.queryBtn, { backgroundColor: primaryColor }]}
+            activeOpacity={0.92}
+            onPress={() =>
+              onApplyQuery({
+                province: location.province,
+                city: location.city,
+                district: location.district,
+                level: location.level,
+                useAutoLocation,
+              })
+            }
+          >
+            <Text style={filterActionStyles.queryBtnText}>{queryButtonLabel}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <Modal
@@ -465,17 +489,38 @@ const styles = StyleSheet.create({
   },
 });
 
+const filterActionStyles = StyleSheet.create({
+  queryBtn: {
+    marginTop: 16,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  queryBtnText: {
+    color: Colors.white,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+});
+
 // Museum Filter Panel Component
 type MuseumFilterPanelProps = {
   primaryColor: string;
   defaultLocation?: LocationValue;
   relocatedLocation?: LocationValue;
+  onApplyQuery?: (filters: MuseumQueryFormState) => void;
+  queryButtonLabel?: string;
 };
+
+const MUSEUM_SORT_OPTIONS = ['离我最近', '名称排序'] as const;
 
 export function MuseumFilterPanel({
   primaryColor,
   defaultLocation = DEFAULT_LOCATION,
   relocatedLocation = DEFAULT_RELOCATED_LOCATION,
+  onApplyQuery,
+  queryButtonLabel = '查询',
 }: MuseumFilterPanelProps) {
   const [isLocating, setIsLocating] = useState(false);
   const [useAutoLocation, setUseAutoLocation] = useState(true);
@@ -728,13 +773,48 @@ export function MuseumFilterPanel({
         {/* Sort By */}
         <View style={museumStyles.sortRow}>
           <Text style={museumStyles.sortLabel}>排序方式</Text>
-          <TouchableOpacity style={museumStyles.sortValue} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={museumStyles.sortValue}
+            activeOpacity={0.7}
+            onPress={() => {
+              const idx = MUSEUM_SORT_OPTIONS.indexOf(
+                sortBy as (typeof MUSEUM_SORT_OPTIONS)[number],
+              );
+              const next =
+                MUSEUM_SORT_OPTIONS[
+                  (Math.max(0, idx) + 1) % MUSEUM_SORT_OPTIONS.length
+                ];
+              setSortBy(next);
+            }}
+          >
             <Text style={[museumStyles.sortValueText, { color: primaryColor }]}>
               {sortBy}
             </Text>
             <ChevronDown size={14} color={primaryColor} />
           </TouchableOpacity>
         </View>
+
+        {onApplyQuery ? (
+          <TouchableOpacity
+            style={[filterActionStyles.queryBtn, { backgroundColor: primaryColor }]}
+            activeOpacity={0.92}
+            onPress={() =>
+              onApplyQuery({
+                province: location.province,
+                city: location.city,
+                district: location.district,
+                level: location.level,
+                useAutoLocation,
+                qualityLevel: selectedQuality,
+                nature: selectedNature,
+                freeOnly,
+                sortBy,
+              })
+            }
+          >
+            <Text style={filterActionStyles.queryBtnText}>{queryButtonLabel}</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Location Picker Modal */}

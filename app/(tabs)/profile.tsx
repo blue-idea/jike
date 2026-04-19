@@ -11,8 +11,9 @@ import { AchievementCard } from '@/components/profile/AchievementCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
   Settings, Share2, ChevronRight, MapPin, Award,
-  BookOpen, Globe, Clock, Star,
+  BookOpen, Globe, Clock, Star, LogOut,
 } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthContext';
 
 const AVATAR = 'https://images.pexels.com/photos/1040881/pexels-photo-1040881.jpeg?auto=compress&cs=tinysrgb&w=200';
 
@@ -26,6 +27,7 @@ const STAT_ITEMS = [
 const TITLES = ['文化旅行者', '古建筑爱好者', '博物馆达人'];
 
 export default function ProfileScreen() {
+  const { user, signOut } = useAuth();
   const [selectedTitle, setSelectedTitle] = useState(0);
   const [showAllStamps, setShowAllStamps] = useState(false);
   const displayedStamps = showAllStamps ? STAMPS_DATA : STAMPS_DATA.slice(0, 6);
@@ -48,6 +50,14 @@ export default function ProfileScreen() {
               <TouchableOpacity style={styles.headerBtn}>
                 <Settings size={18} color={Colors.white} />
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerBtn}
+                onPress={() => void signOut()}
+                accessibilityRole="button"
+                accessibilityLabel="登出"
+              >
+                <LogOut size={18} color={Colors.white} />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.profileSection}>
@@ -57,7 +67,9 @@ export default function ProfileScreen() {
                   <Text style={styles.levelText}>Lv.7</Text>
                 </View>
               </View>
-              <Text style={styles.username}>文化探索者 · 山河客</Text>
+              <Text style={styles.username}>
+                {user?.email ?? '文化探索者 · 山河客'}
+              </Text>
               <TouchableOpacity
                 style={styles.titleSelector}
                 onPress={() => setSelectedTitle((v) => (v + 1) % TITLES.length)}

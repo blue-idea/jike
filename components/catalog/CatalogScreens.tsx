@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   Image,
   ImageBackground,
@@ -20,7 +20,18 @@ import {
   MUSEUM_CARDS,
   SCENIC_FEATURED,
   SCENIC_MAP_IMAGE,
+  type MuseumCardItem,
+  type ScenicFeature,
 } from '@/constants/CatalogData';
+import {
+  filterMuseumCards,
+  filterScenicFeatures,
+  formatMuseumResultHint,
+  formatScenicResultHint,
+  sortMuseumCards,
+  type MuseumQueryFormState,
+  type ScenicLocationFormState,
+} from '@/lib/catalog/catalogQueryFilters';
 import {
   GeoLocationFilter,
   MuseumFilterPanel,
@@ -63,10 +74,27 @@ function TopBar({ title }: { title: string }) {
 }
 
 export function ScenicSearchContent() {
+  const [scenicResults, setScenicResults] = useState<ScenicFeature[]>(() => [
+    ...SCENIC_FEATURED,
+  ]);
+  const [resultHint, setResultHint] = useState('');
+
+  const onApplyScenicQuery = useCallback((f: ScenicLocationFormState) => {
+    const next = filterScenicFeatures([...SCENIC_FEATURED], f);
+    setScenicResults(next);
+    setResultHint(formatScenicResultHint(f, next.length));
+  }, []);
+
+  const hero = scenicResults[0];
+  const scenicCards = scenicResults.slice(1);
+
   return (
     <>
       <View style={styles.sectionPad}>
-        <GeoLocationFilter primaryColor={stylesVars.scenicPrimary} />
+        <GeoLocationFilter
+          primaryColor={stylesVars.scenicPrimary}
+          onApplyQuery={onApplyScenicQuery}
+        />
       </View>
 
       <View style={styles.sectionPad}>
@@ -83,36 +111,47 @@ export function ScenicSearchContent() {
           </TouchableOpacity>
         </View>
 
-        <ImageBackground
-          source={{ uri: SCENIC_FEATURED[0].image }}
-          imageStyle={styles.heroImage}
-          style={styles.heroCard}
-        >
-          <LinearGradient
-            colors={['rgba(14,71,83,0.1)', 'rgba(14,71,83,0.88)']}
-            style={styles.heroOverlay}
+        {resultHint ? (
+          <Text style={styles.filterResultHint}>{resultHint}</Text>
+        ) : null}
+
+        {hero ? (
+          <ImageBackground
+            source={{ uri: hero.image }}
+            imageStyle={styles.heroImage}
+            style={styles.heroCard}
           >
-            <View style={styles.heroBadgeRow}>
-              {SCENIC_FEATURED[0].tags.map((tag) => (
-                <Text key={tag} style={styles.heroBadge}>
-                  {tag}
-                </Text>
-              ))}
-              <Text style={styles.heroDistance}>
-                {SCENIC_FEATURED[0].distance}
-              </Text>
-            </View>
-            <View style={styles.heroMeta}>
-              <Text style={styles.heroTitle}>{SCENIC_FEATURED[0].title}</Text>
-              <Text style={styles.heroSubtitle}>
-                {SCENIC_FEATURED[0].subtitle}
-              </Text>
-            </View>
-          </LinearGradient>
-        </ImageBackground>
+            <LinearGradient
+              colors={['rgba(14,71,83,0.1)', 'rgba(14,71,83,0.88)']}
+              style={styles.heroOverlay}
+            >
+              <View style={styles.heroBadgeRow}>
+                {hero.tags.map((tag) => (
+                  <Text key={tag} style={styles.heroBadge}>
+                    {tag}
+                  </Text>
+                ))}
+                {hero.distance ? (
+                  <Text style={styles.heroDistance}>{hero.distance}</Text>
+                ) : null}
+              </View>
+              <View style={styles.heroMeta}>
+                <Text style={styles.heroTitle}>{hero.title}</Text>
+                <Text style={styles.heroSubtitle}>{hero.subtitle}</Text>
+              </View>
+            </LinearGradient>
+          </ImageBackground>
+        ) : (
+          <View style={styles.catalogEmptyBox}>
+            <Text style={styles.catalogEmptyTitle}>暂无符合筛选的结果</Text>
+            {resultHint ? (
+              <Text style={styles.catalogEmptyHint}>{resultHint}</Text>
+            ) : null}
+          </View>
+        )}
 
         <View style={styles.cardGrid}>
-          {SCENIC_FEATURED.slice(1).map((item) => (
+          {scenicCards.map((item) => (
             <View key={item.id} style={styles.scenicCard}>
               <Image
                 source={{ uri: item.image }}
@@ -137,7 +176,7 @@ export function ScenicSearchContent() {
                       color={Colors.accent}
                       fill={Colors.accent}
                     />
-                    <Text style={styles.ratingText}>{item.rating}</Text>
+                    <Text style={styles.ratingText}>{item.rating ?? '—'}</Text>
                   </View>
                   <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
                 </View>
@@ -369,12 +408,40 @@ export function HeritageDirectoryScreen() {
 }
 
 export function MuseumDirectoryContent() {
+  const [museumResults, setMuseumResults] = useState<MuseumCardItem[]>(() => [
+    ...MUSEUM_CARDS,
+  ]);
+  const [museumHint, setMuseumHint] = useState('');
+
+  const onApplyMuseumQuery = useCallback((f: MuseumQueryFormState) => {
+    let next = filterMuseumCards([...MUSEUM_CARDS], f);
+    next = sortMuseumCards(next, f.sortBy);
+    setMuseumResults(next);
+    setMuseumHint(formatMuseumResultHint(f, next.length));
+  }, []);
+
   return (
     <View style={styles.sectionPad}>
-      <MuseumFilterPanel primaryColor={stylesVars.heritagePrimary} />
+      <MuseumFilterPanel
+        primaryColor={stylesVars.heritagePrimary}
+        onApplyQuery={onApplyMuseumQuery}
+      />
+
+      {museumHint ? (
+        <Text style={styles.filterResultHint}>{museumHint}</Text>
+      ) : null}
+
+      {museumResults.length === 0 ? (
+        <View style={styles.catalogEmptyBox}>
+          <Text style={styles.catalogEmptyTitle}>暂无符合筛选的博物馆</Text>
+          {museumHint ? (
+            <Text style={styles.catalogEmptyHint}>{museumHint}</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.museumList}>
-        {MUSEUM_CARDS.map((item) => (
+        {museumResults.map((item) => (
           <TouchableOpacity
             key={item.id}
             style={styles.museumCard}
@@ -412,7 +479,9 @@ export function MuseumDirectoryContent() {
         <TouchableOpacity style={styles.loadMoreButton} activeOpacity={0.9}>
           <Text style={styles.loadMoreText}>加载更多博物馆</Text>
         </TouchableOpacity>
-        <Text style={styles.loadMoreHint}>已显示 5/5600+ 所博物馆</Text>
+        <Text style={styles.loadMoreHint}>
+          已显示 {museumResults.length} 条（示例数据，点击「查询」按筛选刷新）
+        </Text>
       </View>
     </View>
   );
@@ -601,6 +670,31 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 13,
     color: Colors.textSecondary,
+  },
+  filterResultHint: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  catalogEmptyBox: {
+    backgroundColor: 'rgba(14,71,83,0.06)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(14,71,83,0.12)',
+  },
+  catalogEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  catalogEmptyHint: {
+    marginTop: 8,
+    fontSize: 13,
+    color: Colors.textMuted,
+    lineHeight: 20,
   },
   linkBtn: {
     flexDirection: 'row',
