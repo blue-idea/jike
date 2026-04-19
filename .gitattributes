@@ -1,2 +1,21 @@
 # Husky 钩子脚本在 Unix/macOS/CI 上需 LF，避免 CRLF 导致 sh 解析异常
 .husky/** text eol=lf
+
+# 本文件与 dotenv 示例无通用扩展名，需单独声明
+.gitattributes text eol=lf
+.env.example text eol=lf
+
+# 业务与配置文本统一 LF，降低 Windows CRLF 与 macOS/CI 混用时的“整文件假变更”
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.sql text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
