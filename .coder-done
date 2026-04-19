@@ -1,0 +1,12 @@
+完成摘要
+- 已创建 scripts/etl/ 下三类名录 ETL 链路：xlsx 读取、字段映射、数据清洗、坐标统一、文化标签生成、质量校验、Supabase upsert 写入和 CLI 报告。
+- 已补充 scripts/etl/FIELD_MAPPING.md，记录三类名录源表头到目标列的映射、版本批次规则、坐标规则和 upsert 识别键。
+- 已新增 lib/catalog/supabaseCatalogQueries.ts，提供景区/国保/博物馆按现有表字段筛选与默认排序的 Supabase 查询函数。
+- 已修复 Task 6 typecheck 发现的两个 TypeScript 错误：收紧目录查询排序 builder 类型，并为 ETL 已有行查询结果增加类型守卫。
+
+EARS 覆盖矩阵
+- EARS-1 → scripts/etl/import-catalogs.ts:importCatalog；scripts/etl/supabase-client.ts:upsertCatalogRows；scripts/etl/xlsx-reader.ts:createMetadata；scripts/etl/transform-scenic.ts:transformScenicRows；scripts/etl/transform-heritage.ts:transformHeritageRows；scripts/etl/transform-museums.ts:transformMuseumRows
+- EARS-2 → lib/catalog/supabaseCatalogQueries.ts:queryScenicCatalog；lib/catalog/supabaseCatalogQueries.ts:queryHeritageCatalog；lib/catalog/supabaseCatalogQueries.ts:queryMuseumCatalog
+
+验证
+- npm run typecheck：通过，零错误。
