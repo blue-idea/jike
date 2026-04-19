@@ -1,13 +1,10 @@
 完成摘要
-- 新增 lib/catalog/supabaseCatalogQueries.ts：queryMapPois() 按图层（scenic/heritage/museum）查询 Supabase POI，仅返回有 lng/lat 的记录
-- 新增 components/catalog/LayerToggle.tsx：图层切换控件（景区/国保/博物馆 + 景区子筛选 5A）
-- 新增 components/catalog/MapLegend.tsx：图例（颜色+标签）
-- 新增 components/catalog/MapErrorState.tsx：网络异常中文提示 + 重试按钮
-- 重写 components/collection/CultureMapView.tsx：数据源从硬编码 CULTURE_MAP_POIS 替换为 queryMapPois() 动态查询，添加加载态/错误态/重试机制
+- app/poi/[id].tsx: POI 详情页路由，支持 scenic/heritage/museum 三类，展示结构化文化信息与下拉刷新
+- lib/poi/poiQueries.ts: queryPoiDetail() 按 id 查询 POI 完整字段，queryPoiVersion() 查询版本用于缓存失效判定
 
 EARS 覆盖矩阵
-- EARS-1 → LayerToggle.tsx:onLayerChange + CultureMapView.tsx:loadPois → queryMapPois → 更新点位集合；MapLegend.tsx 同步图例说明
-- EARS-2 → CultureMapView.tsx:onError + MapErrorState.tsx：网络异常显示中文提示 + 重试按钮
+- EARS-1 → app/poi/[id].tsx：展示结构化文化信息（基础信息、类型特有详情、storyline 占位、图文）
+- EARS-2 → app/poi/[id].tsx:onRefresh + queryPoiVersion：下拉刷新重新拉取，版本更新后展示最新内容
 
 验证
 - npm run typecheck：通过，零错误
