@@ -16,7 +16,11 @@ import {
 } from 'lucide-react-native';
 import { CHINA_REGIONS } from '@/constants/CatalogData';
 import { Colors } from '@/constants/Colors';
-import type { MuseumQueryFormState, ScenicLocationFormState } from '@/lib/catalog/catalogQueryFilters';
+import {
+  ALL_DISTRICTS,
+  type MuseumQueryFormState,
+  type ScenicLocationFormState,
+} from '@/lib/catalog/catalogQueryFilters';
 
 type PickerType = 'province' | 'city' | 'district' | 'level';
 
@@ -32,7 +36,6 @@ type GeoLocationFilterProps = {
   defaultLocation?: LocationValue;
   relocatedLocation?: LocationValue;
   showLevelFilter?: boolean;
-  /** 景区表没有区县字段，默认 true */
   showDistrictFilter?: boolean;
   /** 根据当前筛选表单执行查询（发现页 A 级景区等） */
   onApplyQuery?: (filters: ScenicLocationFormState) => void;
@@ -42,14 +45,14 @@ type GeoLocationFilterProps = {
 const DEFAULT_LOCATION: LocationValue = {
   province: '陕西省',
   city: '西安市',
-  district: '碑林区',
+  district: ALL_DISTRICTS,
   level: '全部等级',
 };
 
 const DEFAULT_RELOCATED_LOCATION: LocationValue = {
   province: '北京市',
   city: '北京市',
-  district: '东城区',
+  district: ALL_DISTRICTS,
   level: '全部等级',
 };
 
@@ -90,11 +93,11 @@ export function GeoLocationFilter({
       setLocation({
         province: value,
         city: '请选择',
-        district: '请选择',
+        district: ALL_DISTRICTS,
         level: location.level,
       });
     } else if (pickerType === 'city') {
-      setLocation((prev) => ({ ...prev, city: value, district: '请选择' }));
+      setLocation((prev) => ({ ...prev, city: value, district: ALL_DISTRICTS }));
     } else if (pickerType === 'district') {
       setLocation((prev) => ({ ...prev, district: value }));
     } else if (pickerType === 'level') {
@@ -112,7 +115,8 @@ export function GeoLocationFilter({
     if (pickerType === 'district') {
       const province = CHINA_REGIONS.find((v) => v.name === location.province);
       const city = province?.cities.find((v) => v.name === location.city);
-      return city ? city.districts : [];
+      const list = city?.districts ?? [];
+      return [ALL_DISTRICTS, ...list];
     }
     return SCENIC_LEVELS;
   }, [location.city, location.province, pickerType]);
@@ -558,11 +562,11 @@ export function MuseumFilterPanel({
       setLocation({
         province: value,
         city: '请选择',
-        district: '请选择',
+        district: ALL_DISTRICTS,
         level: location.level,
       });
     } else if (pickerType === 'city') {
-      setLocation((prev) => ({ ...prev, city: value, district: '请选择' }));
+      setLocation((prev) => ({ ...prev, city: value, district: ALL_DISTRICTS }));
     } else if (pickerType === 'district') {
       setLocation((prev) => ({ ...prev, district: value }));
     }
@@ -578,7 +582,8 @@ export function MuseumFilterPanel({
     if (pickerType === 'district') {
       const province = CHINA_REGIONS.find((v) => v.name === location.province);
       const city = province?.cities.find((v) => v.name === location.city);
-      return city ? city.districts : [];
+      const list = city?.districts ?? [];
+      return [ALL_DISTRICTS, ...list];
     }
     return [];
   }, [location.city, location.province, pickerType]);

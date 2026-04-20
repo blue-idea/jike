@@ -145,6 +145,7 @@ function loadScenic() {
       address: textOrNull(pick(r, "address")),
       provincial: textOrNull(pick(r, "provincial")),
       city: textOrNull(pick(r, "city")),
+      county: textOrNull(pick(r, "county")),
       full_address: textOrNull(pick(r, "full_address")),
       lng_wgs84: parseNumber(pick(r, "lng_wgs84")),
       lat_wgs84: parseNumber(pick(r, "lat_wgs84")),

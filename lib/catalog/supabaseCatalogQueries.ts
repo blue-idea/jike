@@ -4,9 +4,11 @@
  * EARS-1 覆盖：queryMapPois → 更新点位集合
  * EARS-2 覆盖：网络异常时抛出供 CultureMapView 捕获
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { CULTURE_MAP_DEFAULT_CENTER } from '@/constants/cultureMapData';
 import type { MuseumCardItem, ScenicFeature } from '@/constants/CatalogData';
+import { isDistrictChosen } from '@/lib/catalog/catalogQueryFilters';
+import { cityMatchValues, provincialMatchValues } from '@/lib/catalog/locationMatchVariants';
+import { supabase } from '@/lib/supabase';
 
 export type CultureMapLayer = 'scenic' | 'heritage' | 'museum';
 
@@ -25,16 +27,10 @@ export interface MapPoi {
 export interface ScenicQueryOptions {
   province?: string;
   city?: string;
+  district?: string;
   level?: string; // '全部等级' | '5A' | '4A' | '3A' | '2A' | '1A'
   keyword?: string; // 搜索关键词
   limit?: number;
-}
-
-function createClient_(): SupabaseClient {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('缺少 Supabase 环境变量');
-  return createClient(url, key);
 }
 
 /**
@@ -46,7 +42,6 @@ export async function queryMapPois(
   scenicFilter: 'all' | '4A' | '5A' = 'all',
   options: { limit?: number } = {},
 ): Promise<MapPoi[]> {
-  const supabase = createClient_();
   const { limit = 500 } = options;
 
   if (layer === 'scenic') {
@@ -74,17 +69,17 @@ export async function queryMapPois(
   if (layer === 'heritage') {
     const { data, error } = await supabase
       .from('catalog_heritage_sites')
-      .select('id,name,lng,lat,batch,province')
-      .not('lng', 'is', null)
-      .not('lat', 'is', null)
+      .select('id,name,longitude,latitude,batch,provincial')
+      .not('longitude', 'is', null)
+      .not('latitude', 'is', null)
       .limit(limit);
     if (error) throw error;
     return (data ?? []).map((r) => ({
       id: r.id,
       name: r.name,
       kind: 'heritage' as CultureMapLayer,
-      lng: r.lng,
-      lat: r.lat,
+      lng: r.longitude,
+      lat: r.latitude,
       label: r.batch ?? undefined,
     }));
   }
@@ -92,7 +87,7 @@ export async function queryMapPois(
   // layer === 'museum'
   const { data, error } = await supabase
     .from('catalog_museums')
-    .select('id,name,lng,lat,quality_level,province')
+    .select('id,name,lng,lat,pname')
     .not('lng', 'is', null)
     .not('lat', 'is', null)
     .limit(limit);
@@ -103,7 +98,7 @@ export async function queryMapPois(
     kind: 'museum' as CultureMapLayer,
     lng: r.lng,
     lat: r.lat,
-    label: r.quality_level ?? undefined,
+    label: undefined,
   }));
 }
 
@@ -114,12 +109,13 @@ export async function queryMapPois(
 export async function queryScenicSpots(
   options: ScenicQueryOptions = {},
 ): Promise<ScenicFeature[]> {
-  const supabase = createClient_();
-  const { level, province, city, keyword, limit = 100 } = options;
+  const { level, province, city, district, keyword, limit = 100 } = options;
 
   let q = supabase
     .from('catalog_scenic_spots')
-    .select('id,name,rating,provincial,city,full_address,lng_wgs84,lat_wgs84,images,recommend,sort')
+    .select(
+      'id,name,rating,provincial,city,county,full_address,lng_wgs84,lat_wgs84,images,recommend,sort',
+    )
     .limit(limit);
 
   // 过滤等级
@@ -127,14 +123,20 @@ export async function queryScenicSpots(
     q = q.eq('rating', level);
   }
 
-  // 过滤省份
+  // 过滤省份（名录数据常为简称，与选择器全称不一致）
   if (province && province !== '请选择') {
-    q = q.eq('provincial', province);
+    const pv = provincialMatchValues(province);
+    q = pv.length === 1 ? q.eq('provincial', pv[0]) : q.in('provincial', pv);
   }
 
   // 过滤城市
   if (city && city !== '请选择') {
-    q = q.eq('city', city);
+    const cv = cityMatchValues(city);
+    q = cv.length === 1 ? q.eq('city', cv[0]) : q.in('city', cv);
+  }
+
+  if (isDistrictChosen(district ?? '')) {
+    q = q.eq('county', district);
   }
 
   const { data, error } = await q;
@@ -150,6 +152,7 @@ export async function queryScenicSpots(
     tags: r.rating ? [`${r.rating}级景区`] : [],
     province: r.provincial || undefined,
     city: r.city || undefined,
+    district: r.county || undefined,
     level: r.rating || undefined,
     distance: undefined,
     rating: undefined,
@@ -185,8 +188,6 @@ export interface MuseumQueryOptions {
   province?: string;
   city?: string;
   district?: string;
-  qualityLevel?: string;
-  nature?: string;
   keyword?: string;
   sortBy?: string;
   limit?: number;
@@ -200,7 +201,6 @@ export interface MuseumQueryOptions {
 export async function queryHeritageSites(
   options: HeritageQueryOptions = {},
 ): Promise<MuseumCardItem[]> {
-  const supabase = createClient_();
   const { province, city, district, era, category, keyword, limit = 100 } = options;
 
   let q = supabase
@@ -212,16 +212,18 @@ export async function queryHeritageSites(
 
   // 过滤省份
   if (province && province !== '请选择') {
-    q = q.eq('provincial', province);
+    const pv = provincialMatchValues(province);
+    q = pv.length === 1 ? q.eq('provincial', pv[0]) : q.in('provincial', pv);
   }
 
   // 过滤城市
   if (city && city !== '请选择') {
-    q = q.eq('city', city);
+    const cv = cityMatchValues(city);
+    q = cv.length === 1 ? q.eq('city', cv[0]) : q.in('city', cv);
   }
 
   // 过滤区县
-  if (district && district !== '请选择') {
+  if (isDistrictChosen(district ?? '')) {
     q = q.eq('county', district);
   }
 
@@ -277,39 +279,30 @@ export async function queryHeritageSites(
 export async function queryMuseums(
   options: MuseumQueryOptions = {},
 ): Promise<MuseumCardItem[]> {
-  const supabase = createClient_();
-  const { province, city, district, qualityLevel, nature, keyword, sortBy, limit = 100 } = options;
+  const { province, city, district, keyword, sortBy, limit = 100 } = options;
 
   let q = supabase
     .from('catalog_museums')
     .select(
-      'id,name,address,tel,pname,cityname,adname,lng,lat,quality_level,nature,recommend,sort,images',
+      'id,name,address,tel,pname,cityname,adname,lng,lat,recommend,sort,images',
     )
     .limit(limit);
 
   // 过滤省份
   if (province && province !== '请选择') {
-    q = q.eq('pname', province);
+    const pv = provincialMatchValues(province);
+    q = pv.length === 1 ? q.eq('pname', pv[0]) : q.in('pname', pv);
   }
 
   // 过滤城市
   if (city && city !== '请选择') {
-    q = q.eq('cityname', city);
+    const cv = cityMatchValues(city);
+    q = cv.length === 1 ? q.eq('cityname', cv[0]) : q.in('cityname', cv);
   }
 
   // 过滤区县
-  if (district && district !== '请选择') {
+  if (isDistrictChosen(district ?? '')) {
     q = q.eq('adname', district);
-  }
-
-  // 过滤质量等级
-  if (qualityLevel && qualityLevel !== '无级别') {
-    q = q.eq('quality_level', qualityLevel);
-  }
-
-  // 过滤性质
-  if (nature && nature !== '不限') {
-    q = q.eq('nature', nature);
   }
 
   const { data, error } = await q;
@@ -319,18 +312,13 @@ export async function queryMuseums(
   let results: MuseumCardItem[] = data.map((r) => ({
     id: r.id,
     title: r.name,
-    location: r.address || [r.pname, r.cityname, r.adname].filter(Boolean).join(' · ') || '',
+    location: [r.pname, r.cityname, r.adname, r.address].filter(Boolean).join(' · '),
     distance: '',
     image: r.images?.[0] || '',
-    tags: [
-      r.quality_level ? `${r.quality_level}博物馆` : null,
-      r.nature || null,
-    ].filter(Boolean) as string[],
+    tags: [],
     provinceFull: r.pname || undefined,
     cityLabel: r.cityname || undefined,
     districtLabel: r.adname || undefined,
-    qualityLevel: r.quality_level || undefined,
-    nature: r.nature || undefined,
   }));
 
   // 关键词搜索（前端过滤）

@@ -24,6 +24,7 @@ import {
   type ScenicFeature,
 } from '@/constants/CatalogData';
 import {
+  ALL_DISTRICTS,
   filterMuseumCards,
   filterScenicFeatures,
   formatMuseumResultHint,
@@ -96,6 +97,7 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
       const data = await queryScenicSpots({
         province: f.province !== '请选择' ? f.province : undefined,
         city: f.city !== '请选择' ? f.city : undefined,
+        district: f.district,
         level: f.level !== '全部等级' ? f.level : undefined,
         keyword: keyword.trim() || undefined,
       });
@@ -123,7 +125,7 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
       loadScenicData({
         province: '陕西省',
         city: '西安市',
-        district: '碑林区',
+        district: ALL_DISTRICTS,
         level: '全部等级',
         useAutoLocation: true,
       });
@@ -139,7 +141,6 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
         <GeoLocationFilter
           primaryColor={stylesVars.scenicPrimary}
           onApplyQuery={onApplyScenicQuery}
-          showDistrictFilter={false}
         />
       </View>
 

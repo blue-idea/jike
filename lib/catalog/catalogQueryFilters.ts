@@ -18,8 +18,15 @@ export type MuseumQueryFormState = {
 
 const PLACEHOLDER = '请选择';
 
+/** 区县：不限制（与「请选择」同为未筛选） */
+export const ALL_DISTRICTS = '全部区县';
+
 function isChosen(value: string) {
   return value && value !== PLACEHOLDER;
+}
+
+export function isDistrictChosen(value: string) {
+  return isChosen(value) && value !== ALL_DISTRICTS;
 }
 
 export function filterScenicFeatures(
@@ -33,7 +40,7 @@ export function filterScenicFeatures(
     if (isChosen(f.city) && item.city && item.city !== f.city) {
       return false;
     }
-    if (isChosen(f.district) && item.district && item.district !== f.district) {
+    if (isDistrictChosen(f.district) && item.district && item.district !== f.district) {
       return false;
     }
     if (f.level && f.level !== '全部等级' && item.level && item.level !== f.level) {
@@ -54,7 +61,7 @@ function museumCityMatches(card: MuseumCardItem, city: string) {
 }
 
 function museumDistrictMatches(card: MuseumCardItem, district: string) {
-  if (!isChosen(district)) return true;
+  if (!isDistrictChosen(district)) return true;
   return card.districtLabel === district;
 }
 
@@ -92,7 +99,13 @@ export function sortMuseumCards(
 }
 
 export function formatScenicResultHint(f: ScenicLocationFormState, count: number) {
-  const loc = [f.province, f.city, f.district].filter(isChosen).join(' · ');
+  const loc = [
+    isChosen(f.province) ? f.province : null,
+    isChosen(f.city) ? f.city : null,
+    isDistrictChosen(f.district) ? f.district : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const level =
     f.level && f.level !== '全部等级' ? ` · ${f.level}` : '';
   const mode = f.useAutoLocation ? '当前定位' : '手动筛选';
@@ -100,7 +113,13 @@ export function formatScenicResultHint(f: ScenicLocationFormState, count: number
 }
 
 export function formatMuseumResultHint(f: MuseumQueryFormState, count: number) {
-  const loc = [f.province, f.city, f.district].filter(isChosen).join(' · ');
+  const loc = [
+    isChosen(f.province) ? f.province : null,
+    isChosen(f.city) ? f.city : null,
+    isDistrictChosen(f.district) ? f.district : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
   const tags = [f.sortBy].filter(Boolean).join(' · ');
   const mode = f.useAutoLocation ? '当前定位' : '手动筛选';
   return `共 ${count} 条（${mode}${loc ? ` · ${loc}` : ''}${tags ? ` · ${tags}` : ''}）`;
