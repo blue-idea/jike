@@ -50,6 +50,28 @@ export function filterScenicFeatures(
   });
 }
 
+const SCENIC_LEVEL_PRIORITY: Record<string, number> = {
+  '5A': 0,
+  '4A': 1,
+  '3A': 2,
+  '2A': 3,
+};
+
+function scenicLevelPriority(level?: string): number {
+  if (!level) return Number.MAX_SAFE_INTEGER;
+  return SCENIC_LEVEL_PRIORITY[level] ?? Number.MAX_SAFE_INTEGER;
+}
+
+export function sortScenicFeaturesByLevel(items: ScenicFeature[]): ScenicFeature[] {
+  const copy = [...items];
+  copy.sort((a, b) => {
+    const diff = scenicLevelPriority(a.level) - scenicLevelPriority(b.level);
+    if (diff !== 0) return diff;
+    return a.title.localeCompare(b.title, 'zh-Hans-CN');
+  });
+  return copy;
+}
+
 function museumProvinceMatches(card: MuseumCardItem, province: string) {
   if (!isChosen(province)) return true;
   return card.provinceFull === province;

@@ -6,7 +6,10 @@
  */
 import { CULTURE_MAP_DEFAULT_CENTER } from '@/constants/cultureMapData';
 import type { MuseumCardItem, ScenicFeature } from '@/constants/CatalogData';
-import { isDistrictChosen } from '@/lib/catalog/catalogQueryFilters';
+import {
+  isDistrictChosen,
+  sortScenicFeaturesByLevel,
+} from '@/lib/catalog/catalogQueryFilters';
 import { cityMatchValues, provincialMatchValues } from '@/lib/catalog/locationMatchVariants';
 import { supabase } from '@/lib/supabase';
 
@@ -169,7 +172,7 @@ export async function queryScenicSpots(
     );
   }
 
-  return results;
+  return sortScenicFeaturesByLevel(results);
 }
 
 /** 发现页重点文保查询参数 */

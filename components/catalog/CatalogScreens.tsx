@@ -29,6 +29,7 @@ import {
   filterScenicFeatures,
   formatMuseumResultHint,
   formatScenicResultHint,
+  sortScenicFeaturesByLevel,
   sortMuseumCards,
   type MuseumQueryFormState,
   type ScenicLocationFormState,
@@ -42,6 +43,7 @@ import {
   GeoLocationFilter,
   MuseumFilterPanel,
 } from '@/components/catalog/GeoLocationFilter';
+import { SmartImage, SmartImageBackground } from '@/components/ui/SmartImage';
 import {
   ArrowLeft,
   ArrowRight,
@@ -106,7 +108,11 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
     } catch (e) {
       // 数据库查询失败时回退到模拟数据
       console.warn('数据库查询失败，回退到模拟数据:', e);
-      const next = filterScenicFeatures([...SCENIC_FEATURED], { ...f, level: f.level === '全部等级' ? '' : f.level });
+      const filtered = filterScenicFeatures([...SCENIC_FEATURED], {
+        ...f,
+        level: f.level === '全部等级' ? '' : f.level,
+      });
+      const next = sortScenicFeaturesByLevel(filtered);
       setScenicResults(next);
       setResultHint(formatScenicResultHint(f, next.length));
     } finally {
@@ -173,10 +179,12 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
             <Text style={styles.catalogEmptyHint}>{error}</Text>
           </View>
         ) : hero ? (
-          <ImageBackground
+          <SmartImageBackground
             source={{ uri: hero.image }}
             imageStyle={styles.heroImage}
             style={styles.heroCard}
+            fallbackText="景区图片不可用"
+            fallbackSource={SCENIC_FALLBACK_IMAGE}
           >
             <LinearGradient
               colors={['rgba(14,71,83,0.1)', 'rgba(14,71,83,0.88)']}
@@ -197,7 +205,7 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
                 <Text style={styles.heroSubtitle}>{hero.subtitle}</Text>
               </View>
             </LinearGradient>
-          </ImageBackground>
+          </SmartImageBackground>
         ) : (
           <View style={styles.catalogEmptyBox}>
             <Text style={styles.catalogEmptyTitle}>暂无符合筛选的结果</Text>
@@ -211,9 +219,11 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
           <View style={styles.cardGrid}>
             {scenicCards.map((item) => (
             <View key={item.id} style={styles.scenicCard}>
-              <Image
+              <SmartImage
                 source={{ uri: item.image }}
                 style={styles.scenicCardImage}
+                fallbackText="景区图片不可用"
+                fallbackSource={SCENIC_FALLBACK_IMAGE}
               />
               <View style={styles.distancePill}>
                 <Text style={styles.distancePillText}>{item.distance}</Text>
@@ -688,6 +698,7 @@ const stylesVars = {
   heritagePrimary: '#0E4753',
   scenicPrimary: '#0E4753',
 };
+const SCENIC_FALLBACK_IMAGE = require('../../assets/images/pexels-photo-3280117.jpeg');
 
 const styles = StyleSheet.create({
   screen: {
