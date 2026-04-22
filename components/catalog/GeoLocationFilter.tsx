@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -21,6 +21,12 @@ import {
   type MuseumQueryFormState,
   type ScenicLocationFormState,
 } from '@/lib/catalog/catalogQueryFilters';
+import {
+  getCurrentLocationWithPermission,
+  reverseGeocodeLocation,
+  type LocationAddress,
+  type LocationStatus,
+} from '@/lib/location/locationService';
 
 type PickerType = 'province' | 'city' | 'district' | 'level';
 
@@ -34,7 +40,6 @@ type LocationValue = {
 type GeoLocationFilterProps = {
   primaryColor: string;
   defaultLocation?: LocationValue;
-  relocatedLocation?: LocationValue;
   showLevelFilter?: boolean;
   showDistrictFilter?: boolean;
   /** 根据当前筛选表单执行查询（发现页 A 级景区等） */
@@ -49,50 +54,165 @@ const DEFAULT_LOCATION: LocationValue = {
   level: '全部等级',
 };
 
-const DEFAULT_RELOCATED_LOCATION: LocationValue = {
-  province: '北京市',
-  city: '北京市',
-  district: ALL_DISTRICTS,
-  level: '全部等级',
-};
-
 const SCENIC_LEVELS = ['全部等级', '5A', '4A', '3A', '2A', '1A'];
+const PLACEHOLDER = '请选择';
+const MUNICIPALITIES = new Set(['北京市', '上海市', '天津市', '重庆市']);
+
+type AutoLocateResult =
+  | { ok: true; location: LocationValue }
+  | { ok: false; message: string; fallbackLocation: LocationValue };
+
+function normalizeRegionName(input: string): string {
+  return input
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治区|自治州|地区|盟|省|市)$/g, '');
+}
+
+function matchRegionName(
+  raw: string | null | undefined,
+  options: string[],
+): string | null {
+  if (!raw) return null;
+  const normalizedRaw = normalizeRegionName(raw);
+  return options.find((item) => normalizeRegionName(item) === normalizedRaw) ?? null;
+}
+
+function fallbackLocation(level: string): LocationValue {
+  return {
+    province: PLACEHOLDER,
+    city: PLACEHOLDER,
+    district: ALL_DISTRICTS,
+    level,
+  };
+}
+
+function mapPermissionError(status: LocationStatus): string {
+  if (status === 'denied') return '定位权限被拒绝，请在系统设置中允许定位后重试。';
+  if (status === 'blocked') return '定位权限不可用，请检查系统权限设置。';
+  if (status === 'unavailable') return '当前环境不支持定位，请手动筛选省市区。';
+  return '定位失败，请稍后重试。';
+}
+
+function normalizeAddressToLocation(
+  address: LocationAddress,
+  level: string,
+): LocationValue | null {
+  const province = matchRegionName(
+    address.province,
+    CHINA_REGIONS.map((item) => item.name),
+  );
+  if (!province) return null;
+
+  const provinceData = CHINA_REGIONS.find((item) => item.name === province);
+  if (!provinceData) return null;
+
+  const rawCity = address.city || (MUNICIPALITIES.has(province) ? province : null);
+  const city = matchRegionName(
+    rawCity,
+    provinceData.cities.map((item) => item.name),
+  );
+  if (!city) {
+    return {
+      province,
+      city: PLACEHOLDER,
+      district: ALL_DISTRICTS,
+      level,
+    };
+  }
+
+  const cityData = provinceData.cities.find((item) => item.name === city);
+  const district = matchRegionName(address.district, cityData?.districts ?? []);
+  return {
+    province,
+    city,
+    district: district ?? ALL_DISTRICTS,
+    level,
+  };
+}
+
+async function resolveAutoLocation(level: string): Promise<AutoLocateResult> {
+  const location = await getCurrentLocationWithPermission();
+  if (!location.coords) {
+    return {
+      ok: false,
+      message:
+        location.status === 'denied' || location.status === 'blocked'
+          ? mapPermissionError(location.status)
+          : location.error || '无法获取当前位置',
+      fallbackLocation: fallbackLocation(level),
+    };
+  }
+
+  const address = await reverseGeocodeLocation(location.coords);
+  if (!address) {
+    return {
+      ok: false,
+      message: '已获取坐标，但无法解析省市区，请手动筛选。',
+      fallbackLocation: fallbackLocation(level),
+    };
+  }
+
+  const normalized = normalizeAddressToLocation(address, level);
+  if (!normalized) {
+    return {
+      ok: false,
+      message: '定位成功，但地址与行政区数据未匹配，请手动筛选。',
+      fallbackLocation: fallbackLocation(level),
+    };
+  }
+
+  return {
+    ok: true,
+    location: normalized,
+  };
+}
 
 export function GeoLocationFilter({
   primaryColor,
   defaultLocation = DEFAULT_LOCATION,
-  relocatedLocation = DEFAULT_RELOCATED_LOCATION,
   showLevelFilter = true,
   showDistrictFilter = true,
   onApplyQuery,
   queryButtonLabel = '查询',
 }: GeoLocationFilterProps) {
   const [isLocating, setIsLocating] = useState(false);
-  const [useAutoLocation, setUseAutoLocation] = useState(true);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [useAutoLocation, setUseAutoLocation] = useState(false);
   const [location, setLocation] = useState<LocationValue>(defaultLocation);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerType, setPickerType] = useState<PickerType>('province');
 
-  const handleRelocate = () => {
+  const handleRelocate = useCallback(async () => {
     setIsLocating(true);
     setUseAutoLocation(true);
-    setTimeout(() => {
+    setLocationError(null);
+    try {
+      const result = await resolveAutoLocation(location.level);
+      if (result.ok) {
+        setLocation(result.location);
+        return;
+      }
+      setUseAutoLocation(false);
+      setLocation(result.fallbackLocation);
+      setLocationError(result.message);
+    } finally {
       setIsLocating(false);
-      setLocation(relocatedLocation);
-    }, 1200);
-  };
+    }
+  }, [location.level]);
 
   const openPicker = (type: PickerType) => {
     setPickerType(type);
     setPickerVisible(true);
     setUseAutoLocation(false);
+    setLocationError(null);
   };
 
   const selectValue = (value: string) => {
     if (pickerType === 'province') {
       setLocation({
         province: value,
-        city: '请选择',
+        city: PLACEHOLDER,
         district: ALL_DISTRICTS,
         level: location.level,
       });
@@ -103,6 +223,7 @@ export function GeoLocationFilter({
     } else if (pickerType === 'level') {
       setLocation((prev) => ({ ...prev, level: value }));
     }
+    setLocationError(null);
     setPickerVisible(false);
   };
 
@@ -182,6 +303,9 @@ export function GeoLocationFilter({
             </TouchableOpacity>
           )}
         </View>
+        {locationError ? (
+          <Text style={styles.locationErrorText}>{locationError}</Text>
+        ) : null}
 
         <View style={styles.manualFilterGrid}>
           <TouchableOpacity
@@ -201,7 +325,7 @@ export function GeoLocationFilter({
           <TouchableOpacity
             style={styles.pickerTrigger}
             onPress={() => openPicker('city')}
-            disabled={location.province === '请选择'}
+            disabled={location.province === PLACEHOLDER}
           >
             <Text style={styles.pickerLabel}>城市</Text>
             <View style={styles.pickerValueRow}>
@@ -216,7 +340,7 @@ export function GeoLocationFilter({
             <TouchableOpacity
               style={styles.pickerTrigger}
               onPress={() => openPicker('district')}
-              disabled={location.city === '请选择'}
+              disabled={location.city === PLACEHOLDER}
             >
               <Text style={styles.pickerLabel}>区县</Text>
               <View style={styles.pickerValueRow}>
@@ -386,6 +510,13 @@ const styles = StyleSheet.create({
   locationEmphasis: {
     fontWeight: '800',
   },
+  locationErrorText: {
+    marginTop: -8,
+    marginBottom: 12,
+    fontSize: 12,
+    color: '#B94A48',
+    lineHeight: 18,
+  },
   refreshIconWrap: {
     padding: 4,
   },
@@ -519,7 +650,6 @@ const filterActionStyles = StyleSheet.create({
 type MuseumFilterPanelProps = {
   primaryColor: string;
   defaultLocation?: LocationValue;
-  relocatedLocation?: LocationValue;
   onApplyQuery?: (filters: MuseumQueryFormState) => void;
   queryButtonLabel?: string;
 };
@@ -529,12 +659,12 @@ const MUSEUM_SORT_OPTIONS = ['离我最近', '名称排序'] as const;
 export function MuseumFilterPanel({
   primaryColor,
   defaultLocation = DEFAULT_LOCATION,
-  relocatedLocation = DEFAULT_RELOCATED_LOCATION,
   onApplyQuery,
   queryButtonLabel = '查询',
 }: MuseumFilterPanelProps) {
   const [isLocating, setIsLocating] = useState(false);
-  const [useAutoLocation, setUseAutoLocation] = useState(true);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [useAutoLocation, setUseAutoLocation] = useState(false);
   const [location, setLocation] = useState<LocationValue>(defaultLocation);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [pickerType, setPickerType] = useState<PickerType>('province');
@@ -542,26 +672,36 @@ export function MuseumFilterPanel({
   // Museum specific filters
   const [sortBy, setSortBy] = useState('离我最近');
 
-  const handleRelocate = () => {
+  const handleRelocate = useCallback(async () => {
     setIsLocating(true);
     setUseAutoLocation(true);
-    setTimeout(() => {
+    setLocationError(null);
+    try {
+      const result = await resolveAutoLocation(location.level);
+      if (result.ok) {
+        setLocation(result.location);
+        return;
+      }
+      setUseAutoLocation(false);
+      setLocation(result.fallbackLocation);
+      setLocationError(result.message);
+    } finally {
       setIsLocating(false);
-      setLocation(relocatedLocation);
-    }, 1200);
-  };
+    }
+  }, [location.level]);
 
   const openPicker = (type: PickerType) => {
     setPickerType(type);
     setPickerVisible(true);
     setUseAutoLocation(false);
+    setLocationError(null);
   };
 
   const selectValue = (value: string) => {
     if (pickerType === 'province') {
       setLocation({
         province: value,
-        city: '请选择',
+        city: PLACEHOLDER,
         district: ALL_DISTRICTS,
         level: location.level,
       });
@@ -570,6 +710,7 @@ export function MuseumFilterPanel({
     } else if (pickerType === 'district') {
       setLocation((prev) => ({ ...prev, district: value }));
     }
+    setLocationError(null);
     setPickerVisible(false);
   };
 
@@ -651,6 +792,9 @@ export function MuseumFilterPanel({
             </TouchableOpacity>
           )}
         </View>
+        {locationError ? (
+          <Text style={styles.locationErrorText}>{locationError}</Text>
+        ) : null}
 
         {/* Province/City/District Selector */}
         <View style={styles.manualFilterGrid}>
@@ -670,7 +814,7 @@ export function MuseumFilterPanel({
           <TouchableOpacity
             style={styles.pickerTrigger}
             onPress={() => openPicker('city')}
-            disabled={location.province === '请选择'}
+            disabled={location.province === PLACEHOLDER}
           >
             <Text style={styles.pickerLabel}>城市</Text>
             <View style={styles.pickerValueRow}>
@@ -684,7 +828,7 @@ export function MuseumFilterPanel({
           <TouchableOpacity
             style={styles.pickerTrigger}
             onPress={() => openPicker('district')}
-            disabled={location.city === '请选择'}
+            disabled={location.city === PLACEHOLDER}
           >
             <Text style={styles.pickerLabel}>区县</Text>
             <View style={styles.pickerValueRow}>

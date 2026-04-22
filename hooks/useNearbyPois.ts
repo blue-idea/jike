@@ -7,8 +7,7 @@
  */
 import { useState, useCallback } from 'react';
 import {
-  getCurrentLocation,
-  requestLocationPermission,
+  getCurrentLocationWithPermission,
   type LocationCoords,
   type LocationStatus,
 } from '@/lib/location/locationService';
@@ -50,17 +49,9 @@ export function useNearbyPois(
       setLoading(true);
       setError(null);
       try {
-        // 1. 请求定位权限
-        const permStatus = await requestLocationPermission();
-        setLocationStatus(permStatus);
-        if (permStatus !== 'granted') {
-          setError('定位权限未授权');
-          setPois([]);
-          return;
-        }
-
-        // 2. 获取当前位置
-        const loc = await getCurrentLocation();
+        // 1. 获取当前位置（必要时触发权限申请并重试）
+        const loc = await getCurrentLocationWithPermission();
+        setLocationStatus(loc.status);
         if (!loc.coords) {
           setError(loc.error ?? '无法获取位置');
           setPois([]);
@@ -68,7 +59,7 @@ export function useNearbyPois(
         }
         setLocationCoords(loc.coords);
 
-        // 3. 查询附近 POI
+        // 2. 查询附近 POI
         const data = await queryNearbyPoisRPC(
           { lng: loc.coords.lng, lat: loc.coords.lat },
           { radiusM: overrides?.radiusM ?? radiusM, limit: 50 },

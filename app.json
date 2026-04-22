@@ -19,7 +19,13 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "允许“迹刻”访问你的位置，用于推荐附近文化点位与距离排序。"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

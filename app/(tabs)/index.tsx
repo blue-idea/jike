@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
   TouchableOpacity, StatusBar,
@@ -12,10 +12,44 @@ import { CategoryFilter } from '@/components/home/CategoryFilter';
 import { SiteCard } from '@/components/home/SiteCard';
 import { NearbyCard } from '@/components/home/NearbyCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
+import {
+  getCurrentLocationWithPermission,
+  reverseGeocodeLocation,
+} from '@/lib/location/locationService';
 import { Bell, MapPin, Sparkles, Mic } from 'lucide-react-native';
 
 export default function HomeScreen() {
-  const [location] = useState('北京市 · 东城区');
+  const [location, setLocation] = useState('定位中...');
+
+  const refreshHeaderLocation = useCallback(async () => {
+    try {
+      const current = await getCurrentLocationWithPermission();
+      if (!current.coords) {
+        if (current.status === 'denied' || current.status === 'blocked') {
+          setLocation('未开启定位');
+          return;
+        }
+        setLocation('定位失败');
+        return;
+      }
+
+      const address = await reverseGeocodeLocation(current.coords);
+      if (!address) {
+        setLocation('未知位置');
+        return;
+      }
+
+      const city = address.city?.trim() || address.province?.trim() || '当前位置';
+      const district = address.district?.trim();
+      setLocation(district ? `${city} · ${district}` : city);
+    } catch {
+      setLocation('定位失败');
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshHeaderLocation();
+  }, [refreshHeaderLocation]);
 
   const handleCategorySelect = (id: string) => {
     if (id === 'heritage') {
@@ -39,10 +73,14 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.locationRow}>
+            <TouchableOpacity
+              style={styles.locationRow}
+              activeOpacity={0.75}
+              onPress={refreshHeaderLocation}
+            >
               <MapPin size={14} color={Colors.accent} />
               <Text style={styles.location}>{location}</Text>
-            </View>
+            </TouchableOpacity>
             <Text style={styles.greeting}>探寻文化踪迹</Text>
           </View>
           <View style={styles.headerRight}>
