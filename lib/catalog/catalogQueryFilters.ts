@@ -16,13 +16,25 @@ export type MuseumQueryFormState = {
   useAutoLocation: boolean;
 };
 
-const PLACEHOLDER = '请选择';
+export type HeritageQueryFormState = {
+  province: string;
+  city: string;
+  district: string;
+  era: string;
+  category: string;
+  batch: string;
+  useAutoLocation: boolean;
+};
 
-/** 区县：不限制（与「请选择」同为未筛选） */
+const PLACEHOLDERS = new Set(['请选择', '璇烽€夋嫨', '???']);
+const ALL_VALUES = new Set(['全部', '鍏ㄩ儴', '??']);
+const ALL_LEVEL_VALUES = new Set(['全部等级', '鍏ㄩ儴绛夌骇']);
+
+/** 区县：不限制（与“请选择”同为未筛选） */
 export const ALL_DISTRICTS = '全部区县';
 
 function isChosen(value: string) {
-  return value && value !== PLACEHOLDER;
+  return Boolean(value) && !PLACEHOLDERS.has(value);
 }
 
 export function isDistrictChosen(value: string) {
@@ -40,10 +52,7 @@ export function filterScenicFeatures(
     if (isChosen(f.city) && item.city && item.city !== f.city) {
       return false;
     }
-    if (isDistrictChosen(f.district) && item.district && item.district !== f.district) {
-      return false;
-    }
-    if (f.level && f.level !== '全部等级' && item.level && item.level !== f.level) {
+    if (f.level && !ALL_LEVEL_VALUES.has(f.level) && item.level && item.level !== f.level) {
       return false;
     }
     return true;
@@ -110,7 +119,7 @@ export function sortMuseumCards(
   sortBy: string,
 ): MuseumCardItem[] {
   const copy = [...items];
-  if (sortBy === '名称排序') {
+  if (sortBy === '名称排序' || sortBy === '鍚嶇О鎺掑簭') {
     copy.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'));
     return copy;
   }
@@ -124,13 +133,12 @@ export function formatScenicResultHint(f: ScenicLocationFormState, count: number
   const loc = [
     isChosen(f.province) ? f.province : null,
     isChosen(f.city) ? f.city : null,
-    isDistrictChosen(f.district) ? f.district : null,
   ]
     .filter(Boolean)
     .join(' · ');
   const level =
     f.level && f.level !== '全部等级' ? ` · ${f.level}` : '';
-  const mode = f.useAutoLocation ? '当前定位' : '手动筛选';
+  const mode = f.useAutoLocation ? '当前位置' : '手动筛选';
   return `共 ${count} 条（${mode}${loc ? ` · ${loc}` : ''}${level}）`;
 }
 
@@ -143,6 +151,24 @@ export function formatMuseumResultHint(f: MuseumQueryFormState, count: number) {
     .filter(Boolean)
     .join(' · ');
   const tags = [f.sortBy].filter(Boolean).join(' · ');
-  const mode = f.useAutoLocation ? '当前定位' : '手动筛选';
+  const mode = f.useAutoLocation ? '当前位置' : '手动筛选';
+  return `共 ${count} 条（${mode}${loc ? ` · ${loc}` : ''}${tags ? ` · ${tags}` : ''}）`;
+}
+
+export function formatHeritageResultHint(
+  f: HeritageQueryFormState,
+  count: number,
+) {
+  const loc = [
+    isChosen(f.province) ? f.province : null,
+    isChosen(f.city) ? f.city : null,
+    isDistrictChosen(f.district) ? f.district : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const tags = [f.era, f.category, f.batch]
+    .filter((value) => Boolean(value) && !ALL_VALUES.has(value))
+    .join(' · ');
+  const mode = f.useAutoLocation ? '当前位置' : '手动筛选';
   return `共 ${count} 条（${mode}${loc ? ` · ${loc}` : ''}${tags ? ` · ${tags}` : ''}）`;
 }

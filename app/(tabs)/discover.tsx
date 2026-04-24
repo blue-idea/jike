@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
-  TouchableOpacity, StatusBar, ActivityIndicator, Dimensions, ImageBackground
+  TouchableOpacity, StatusBar, ActivityIndicator, Dimensions, ImageBackground,
+  type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,12 @@ export default function DiscoverScreen() {
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'heritage' | 'scenic' | 'museum'>('heritage');
+  const [reachedBottom, setReachedBottom] = useState(false);
+  const [loadMoreSignals, setLoadMoreSignals] = useState({
+    heritage: 0,
+    scenic: 0,
+    museum: 0,
+  });
 
   useEffect(() => {
     // Initial fetch mockup
@@ -33,6 +40,32 @@ export default function DiscoverScreen() {
     });
   };
 
+  useEffect(() => {
+    setReachedBottom(false);
+  }, [activeTab]);
+
+  const bumpActiveTabSignal = useCallback(() => {
+    setLoadMoreSignals((prev) => ({
+      ...prev,
+      [activeTab]: prev[activeTab] + 1,
+    }));
+  }, [activeTab]);
+
+  const onDiscoverScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+      const hasUserScrolledDown = contentOffset.y > 24;
+      const isNearBottom =
+        hasUserScrolledDown &&
+        layoutMeasurement.height + contentOffset.y >= contentSize.height - 100;
+      if (isNearBottom && !reachedBottom) {
+        bumpActiveTabSignal();
+      }
+      setReachedBottom(isNearBottom);
+    },
+    [bumpActiveTabSignal, reachedBottom],
+  );
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
@@ -42,6 +75,8 @@ export default function DiscoverScreen() {
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
+        onScroll={onDiscoverScroll}
+        scrollEventThrottle={16}
       >
         <View style={styles.searchSection}>
           <View style={styles.searchRow}>
@@ -73,9 +108,18 @@ export default function DiscoverScreen() {
         </View>
 
         <View style={styles.contentContainer}>
-          {activeTab === 'heritage' && <HeritageDirectoryContent />}
-          {activeTab === 'scenic' && <ScenicSearchContent keyword={query} />}
-          {activeTab === 'museum' && <MuseumDirectoryContent />}
+          {activeTab === 'heritage' && (
+            <HeritageDirectoryContent loadMoreSignal={loadMoreSignals.heritage} />
+          )}
+          {activeTab === 'scenic' && (
+            <ScenicSearchContent
+              keyword={query}
+              loadMoreSignal={loadMoreSignals.scenic}
+            />
+          )}
+          {activeTab === 'museum' && (
+            <MuseumDirectoryContent loadMoreSignal={loadMoreSignals.museum} />
+          )}
         </View>
 
         <View style={{ height: 30 }} />

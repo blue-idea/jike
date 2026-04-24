@@ -2,7 +2,6 @@ import React, { useCallback, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Image,
-  ImageBackground,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -15,8 +14,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import {
-  HERITAGE_DYNASTIES,
-  HERITAGE_TYPES,
   MUSEUM_CARDS,
   SCENIC_FEATURED,
   SCENIC_MAP_IMAGE,
@@ -25,32 +22,34 @@ import {
 } from '@/constants/CatalogData';
 import {
   ALL_DISTRICTS,
+  formatHeritageResultHint,
   filterMuseumCards,
   filterScenicFeatures,
   formatMuseumResultHint,
   formatScenicResultHint,
+  type HeritageQueryFormState,
   sortScenicFeaturesByLevel,
   sortMuseumCards,
   type MuseumQueryFormState,
   type ScenicLocationFormState,
 } from '@/lib/catalog/catalogQueryFilters';
 import {
+  queryHeritageFilterOptions,
   queryHeritageSites,
   queryMuseums,
   queryScenicSpots,
 } from '@/lib/catalog/supabaseCatalogQueries';
 import {
   GeoLocationFilter,
+  HeritageFilterPanel,
   MuseumFilterPanel,
 } from '@/components/catalog/GeoLocationFilter';
 import { SmartImage, SmartImageBackground } from '@/components/ui/SmartImage';
 import {
   ArrowLeft,
   ArrowRight,
-  Landmark,
   MapPin,
   Star,
-  Swords,
 } from 'lucide-react-native';
 
 function TopBar({ title }: { title: string }) {
@@ -81,62 +80,125 @@ function TopBar({ title }: { title: string }) {
 
 interface ScenicSearchContentProps {
   keyword?: string;
+  loadMoreSignal?: number;
 }
 
-export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) {
-  const [scenicResults, setScenicResults] = useState<ScenicFeature[]>(() => [
-    ...SCENIC_FEATURED,
-  ]);
+interface HeritageDirectoryContentProps {
+  loadMoreSignal?: number;
+}
+
+interface MuseumDirectoryContentProps {
+  loadMoreSignal?: number;
+}
+
+const PAGE_SIZE = 5;
+
+function hasValidImage(image?: string) {
+  return Boolean(image && image.trim());
+}
+
+export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSignal = 0 }: ScenicSearchContentProps) {
+  const initialScenicFilters: ScenicLocationFormState = {
+    province: '\u9655\u897f\u7701',
+    city: '\u897f\u5b89\u5e02',
+    district: ALL_DISTRICTS,
+    level: '\u5168\u90e8\u7b49\u7ea7',
+    useAutoLocation: true,
+  };
+  const [scenicResults, setScenicResults] = useState<ScenicFeature[]>([]);
+  const [scenicPage, setScenicPage] = useState(1);
+  const [hasMoreScenic, setHasMoreScenic] = useState(true);
+  const [activeScenicFilters, setActiveScenicFilters] = useState<ScenicLocationFormState>(
+    initialScenicFilters,
+  );
   const [resultHint, setResultHint] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const normalizeScenicFilters = useCallback((f: ScenicLocationFormState): ScenicLocationFormState => ({
+    ...f,
+    district: ALL_DISTRICTS,
+  }), []);
 
-  const loadScenicData = useCallback(async (f: ScenicLocationFormState) => {
-    setLoading(true);
+  const loadScenicData = useCallback(async (
+    rawFilters: ScenicLocationFormState,
+    page: number,
+    append: boolean,
+  ) => {
+    const f = normalizeScenicFilters(rawFilters);
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      // 使用真实数据库查询
       const data = await queryScenicSpots({
-        province: f.province !== '请选择' ? f.province : undefined,
-        city: f.city !== '请选择' ? f.city : undefined,
-        district: f.district,
-        level: f.level !== '全部等级' ? f.level : undefined,
+        province: f.province !== '\u8bf7\u9009\u62e9' ? f.province : undefined,
+        city: f.city !== '\u8bf7\u9009\u62e9' ? f.city : undefined,
+        level: f.level !== '\u5168\u90e8\u7b49\u7ea7' ? f.level : undefined,
         keyword: keyword.trim() || undefined,
+        page,
+        pageSize: PAGE_SIZE,
       });
-      setScenicResults(data.length > 0 ? data : []);
-      setResultHint(formatScenicResultHint(f, data.length));
+      setHasMoreScenic(data.length === PAGE_SIZE);
+      setScenicResults((prev) => {
+        const next = append ? [...prev, ...data] : data;
+        setResultHint(formatScenicResultHint(f, next.length));
+        return next;
+      });
     } catch (e) {
-      // 数据库查询失败时回退到模拟数据
-      console.warn('数据库查询失败，回退到模拟数据:', e);
+      console.warn('scenic query failed, fallback to mock data', e);
       const filtered = filterScenicFeatures([...SCENIC_FEATURED], {
         ...f,
-        level: f.level === '全部等级' ? '' : f.level,
+        level: f.level === '\u5168\u90e8\u7b49\u7ea7' ? '' : f.level,
       });
       const next = sortScenicFeaturesByLevel(filtered);
-      setScenicResults(next);
-      setResultHint(formatScenicResultHint(f, next.length));
+      const startIndex = (page - 1) * PAGE_SIZE;
+      const paged = next.slice(startIndex, startIndex + PAGE_SIZE);
+      setHasMoreScenic(startIndex + PAGE_SIZE < next.length);
+      setScenicResults((prev) => {
+        const merged = append ? [...prev, ...paged] : paged;
+        setResultHint(formatScenicResultHint(f, merged.length));
+        return merged;
+      });
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
-  }, [keyword]);
+  }, [keyword, normalizeScenicFilters]);
 
   const onApplyScenicQuery = useCallback((f: ScenicLocationFormState) => {
-    loadScenicData(f);
-  }, [loadScenicData]);
+    const normalized = normalizeScenicFilters(f);
+    setActiveScenicFilters(normalized);
+    setScenicPage(1);
+    setHasMoreScenic(true);
+  }, [normalizeScenicFilters]);
 
-  // 关键词变化时重新查询
   useEffect(() => {
-    if (keyword.trim()) {
-      // 如果有搜索关键词，用当前筛选条件+关键词查询
-      loadScenicData({
-        province: '陕西省',
-        city: '西安市',
-        district: ALL_DISTRICTS,
-        level: '全部等级',
-        useAutoLocation: true,
-      });
-    }
-  }, [keyword, loadScenicData]);
+    setScenicPage(1);
+    setHasMoreScenic(true);
+    loadScenicData(activeScenicFilters, 1, false);
+  }, [activeScenicFilters, keyword, loadScenicData]);
+
+  useEffect(() => {
+    if (_loadMoreSignal <= 0) return;
+    if (loading || loadingMore || !hasMoreScenic) return;
+    const nextPage = scenicPage + 1;
+    setScenicPage(nextPage);
+    loadScenicData(activeScenicFilters, nextPage, true);
+  }, [
+    _loadMoreSignal,
+    activeScenicFilters,
+    hasMoreScenic,
+    loadScenicData,
+    loading,
+    loadingMore,
+    scenicPage,
+  ]);
 
   const hero = scenicResults[0];
   const scenicCards = scenicResults.slice(1);
@@ -146,6 +208,7 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
       <View style={styles.sectionPad}>
         <GeoLocationFilter
           primaryColor={stylesVars.scenicPrimary}
+          showDistrictFilter={false}
           onApplyQuery={onApplyScenicQuery}
         />
       </View>
@@ -153,13 +216,13 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
       <View style={styles.sectionPad}>
         <View style={styles.sectionHeading}>
           <View>
-            <Text style={styles.sectionTitle}>附近文化地标</Text>
+            <Text style={styles.sectionTitle}>{'\u9644\u8fd1\u6587\u5316\u5730\u6807'}</Text>
             <Text style={styles.sectionSubtitle}>
-              沿用 Stitch 稿的景点搜索结构
+              {'\u6309\u7701\u5e02\u4e0e\u7b49\u7ea7\u7b5b\u9009 A \u7ea7\u666f\u533a'}
             </Text>
           </View>
           <TouchableOpacity style={styles.linkBtn} activeOpacity={0.85}>
-            <Text style={styles.linkBtnText}>查看全部</Text>
+            <Text style={styles.linkBtnText}>{'\u67e5\u770b\u5168\u90e8'}</Text>
             <ArrowRight size={14} color={stylesVars.scenicPrimary} />
           </TouchableOpacity>
         </View>
@@ -168,22 +231,22 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
           <Text style={styles.filterResultHint}>{resultHint}</Text>
         ) : null}
 
-        {loading ? (
+        {loading && scenicResults.length === 0 ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={stylesVars.scenicPrimary} />
-            <Text style={styles.loadingText}>正在加载A级景区...</Text>
+            <Text style={styles.loadingText}>{'\u6b63\u5728\u52a0\u8f7d A \u7ea7\u666f\u533a...'}</Text>
           </View>
         ) : error ? (
           <View style={styles.catalogEmptyBox}>
-            <Text style={styles.catalogEmptyTitle}>加载失败</Text>
+            <Text style={styles.catalogEmptyTitle}>{'\u52a0\u8f7d\u5931\u8d25'}</Text>
             <Text style={styles.catalogEmptyHint}>{error}</Text>
           </View>
-        ) : hero ? (
+        ) : hero && hasValidImage(hero.image) ? (
           <SmartImageBackground
             source={{ uri: hero.image }}
             imageStyle={styles.heroImage}
             style={styles.heroCard}
-            fallbackText="景区图片不可用"
+            fallbackText={'\u666f\u533a\u56fe\u7247\u4e0d\u53ef\u7528'}
             fallbackSource={SCENIC_FALLBACK_IMAGE}
           >
             <LinearGradient
@@ -206,9 +269,26 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
               </View>
             </LinearGradient>
           </SmartImageBackground>
+        ) : hero ? (
+          <View style={styles.textOnlyResultItem}>
+            <Text style={styles.textOnlyResultTitle}>{hero.title}</Text>
+            <Text style={styles.cardSubtitle}>{hero.subtitle}</Text>
+            {hero.tags.length > 0 ? (
+              <View style={styles.textOnlyTagsRow}>
+                {hero.tags.map((tag) => (
+                  <Text key={tag} style={styles.textOnlyTag}>
+                    {tag}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
+            {hero.distance ? (
+              <Text style={styles.museumDistance}>{hero.distance}</Text>
+            ) : null}
+          </View>
         ) : (
           <View style={styles.catalogEmptyBox}>
-            <Text style={styles.catalogEmptyTitle}>暂无符合筛选的结果</Text>
+            <Text style={styles.catalogEmptyTitle}>{'\u6682\u65e0\u7b26\u5408\u7b5b\u9009\u7684\u7ed3\u679c'}</Text>
             {resultHint ? (
               <Text style={styles.catalogEmptyHint}>{resultHint}</Text>
             ) : null}
@@ -218,50 +298,71 @@ export function ScenicSearchContent({ keyword = '' }: ScenicSearchContentProps) 
         {!loading && !error && scenicCards.length > 0 && (
           <View style={styles.cardGrid}>
             {scenicCards.map((item) => (
-            <View key={item.id} style={styles.scenicCard}>
-              <SmartImage
-                source={{ uri: item.image }}
-                style={styles.scenicCardImage}
-                fallbackText="景区图片不可用"
-                fallbackSource={SCENIC_FALLBACK_IMAGE}
-              />
-              <View style={styles.distancePill}>
-                <Text style={styles.distancePillText}>{item.distance}</Text>
-              </View>
-              <View style={styles.cardBody}>
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <View style={styles.tagRow}>
-                  {item.tags.map((tag) => (
-                    <Text key={tag} style={styles.cardTag}>
-                      {tag}
-                    </Text>
-                  ))}
-                </View>
-                <View style={styles.cardFooter}>
-                  <View style={styles.ratingRow}>
-                    <Star
-                      size={13}
-                      color={Colors.accent}
-                      fill={Colors.accent}
-                    />
-                    <Text style={styles.ratingText}>{item.rating ?? '—'}</Text>
+              hasValidImage(item.image) ? (
+                <View key={item.id} style={styles.scenicCard}>
+                  <SmartImage
+                    source={{ uri: item.image }}
+                    style={styles.scenicCardImage}
+                    fallbackSource={SCENIC_FALLBACK_IMAGE}
+                  />
+                  <View style={styles.distancePill}>
+                    <Text style={styles.distancePillText}>{item.distance}</Text>
                   </View>
-                  <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+                  <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    <View style={styles.tagRow}>
+                      {item.tags.map((tag) => (
+                        <Text key={tag} style={styles.cardTag}>
+                          {tag}
+                        </Text>
+                      ))}
+                    </View>
+                    <View style={styles.cardFooter}>
+                      <View style={styles.ratingRow}>
+                        <Star size={13} color={Colors.accent} fill={Colors.accent} />
+                        <Text style={styles.ratingText}>{item.rating ?? '-'}</Text>
+                      </View>
+                      <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </View>
-          ))}
-        </View>
+              ) : (
+                <View key={item.id} style={styles.textOnlyResultItem}>
+                  <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+                  <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
+                  {item.tags.length > 0 ? (
+                    <View style={styles.textOnlyTagsRow}>
+                      {item.tags.map((tag) => (
+                        <Text key={tag} style={styles.textOnlyTag}>
+                          {tag}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                  {item.distance ? (
+                    <Text style={styles.museumDistance}>{item.distance}</Text>
+                  ) : null}
+                </View>
+              )
+            ))}
+          </View>
         )}
+
+        {!loading && !error && hasMoreScenic ? (
+          <Text style={styles.loadMoreHint}>{'\u7ee7\u7eed\u4e0b\u62c9\u52a0\u8f7d\u4e0b\u4e00\u9875\uff08\u6bcf\u9875 5 \u6761\uff09'}</Text>
+        ) : null}
+        {loadingMore ? (
+          <Text style={styles.loadMoreHint}>{'\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u5185\u5bb9...'}</Text>
+        ) : null}
 
         <View style={styles.mapPromo}>
           <View style={styles.mapPromoText}>
-            <Text style={styles.mapPromoTitle}>遗产地图</Text>
+            <Text style={styles.mapPromoTitle}>{'\u9057\u4ea7\u5730\u56fe'}</Text>
             <Text style={styles.mapPromoBody}>
-              探索你周边的古都脉络，每个街角都可能通往一段千年故事。
+              {'\u63a2\u7d22\u4f60\u5468\u8fb9\u7684\u53e4\u90fd\u8109\u7edc\uff0c\u6bcf\u4e00\u4e2a\u8857\u89d2\u90fd\u53ef\u80fd\u901a\u5f80\u4e00\u6bb5\u5343\u5e74\u6545\u4e8b\u3002'}
             </Text>
             <TouchableOpacity style={styles.mapButton} activeOpacity={0.9}>
-              <Text style={styles.mapButtonText}>探索周边</Text>
+              <Text style={styles.mapButtonText}>{'\u63a2\u7d22\u5468\u8fb9'}</Text>
             </TouchableOpacity>
           </View>
           <Image source={{ uri: SCENIC_MAP_IMAGE }} style={styles.mapPreview} />
@@ -290,238 +391,238 @@ export function ScenicSearchScreen() {
   );
 }
 
-interface HeritageTypeItem {
-  id: string;
-  title: string;
-  subtitle: string;
-  image: string;
-  tall?: boolean;
-}
-
-export function HeritageDirectoryContent() {
-  const [heritageTypes, setHeritageTypes] = useState<HeritageTypeItem[]>(() => [
-    ...HERITAGE_TYPES,
+export function HeritageDirectoryContent({
+  loadMoreSignal = 0,
+}: HeritageDirectoryContentProps = {}) {
+  const [heritageResults, setHeritageResults] = useState<MuseumCardItem[]>(() => [
+    ...MUSEUM_CARDS,
   ]);
+  const [heritagePage, setHeritagePage] = useState(1);
+  const [hasMoreHeritage, setHasMoreHeritage] = useState(true);
+  const [activeHeritageFilters, setActiveHeritageFilters] =
+    useState<HeritageQueryFormState>({
+      province: '\u8bf7\u9009\u62e9',
+      city: '\u8bf7\u9009\u62e9',
+      district: '\u8bf7\u9009\u62e9',
+      era: '\u5168\u90e8',
+      category: '\u5168\u90e8',
+      batch: '\u5168\u90e8',
+      useAutoLocation: false,
+    });
+  const [heritageHint, setHeritageHint] = useState('');
+  const [filterOptions, setFilterOptions] = useState<{
+    eras: string[];
+    categories: string[];
+    batches: string[];
+  }>({
+    eras: [],
+    categories: [],
+    batches: [],
+  });
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHeritageData = useCallback(async () => {
-    setLoading(true);
+  const loadHeritageData = useCallback(async (
+    f: HeritageQueryFormState,
+    page: number,
+    append: boolean,
+  ) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      // 使用真实数据库查询
-      const data = await queryHeritageSites({});
-      if (data.length > 0) {
-        // 将查询结果映射为 HERITAGE_TYPES 格式（前4条）
-        const mapped: HeritageTypeItem[] = data.slice(0, 4).map((r, idx) => ({
-          id: r.id,
-          title: r.title,
-          subtitle: r.tags.join(' · ') || r.location || '',
-          image: r.image || HERITAGE_TYPES[idx]?.image || '',
-          tall: idx === 0 || idx === 3,
-        }));
-        setHeritageTypes(mapped);
-      }
+      const data = await queryHeritageSites({
+        province: f.province !== '\u8bf7\u9009\u62e9' ? f.province : undefined,
+        city: f.city !== '\u8bf7\u9009\u62e9' ? f.city : undefined,
+        district: f.district !== '\u8bf7\u9009\u62e9' ? f.district : undefined,
+        era: f.era !== '\u5168\u90e8' ? f.era : undefined,
+        category: f.category !== '\u5168\u90e8' ? f.category : undefined,
+        batch: f.batch !== '\u5168\u90e8' ? f.batch : undefined,
+        page,
+        pageSize: PAGE_SIZE,
+      });
+      setHasMoreHeritage(data.length === PAGE_SIZE);
+      setHeritageResults((prev) => {
+        const next = append ? [...prev, ...data] : data;
+        setHeritageHint(formatHeritageResultHint(f, next.length));
+        return next;
+      });
     } catch (e) {
-      // 数据库查询失败时回退到模拟数据
-      console.warn('数据库查询失败，回退到模拟数据:', e);
-      setHeritageTypes([...HERITAGE_TYPES]);
+      console.warn('heritage query failed', e);
+      setHasMoreHeritage(false);
+      setHeritageResults((prev) => {
+        const next = append ? prev : [];
+        setHeritageHint(formatHeritageResultHint(f, next.length));
+        return next;
+      });
+      setError('\u91cd\u70b9\u6587\u4fdd\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
-  useEffect(() => {
-    loadHeritageData();
-  }, [loadHeritageData]);
+  const loadHeritageFilterOptions = useCallback(async () => {
+    try {
+      const options = await queryHeritageFilterOptions();
+      setFilterOptions(options);
+    } catch (e) {
+      console.warn('heritage filter options failed', e);
+      setFilterOptions({
+        eras: [],
+        categories: [],
+        batches: [],
+      });
+    }
+  }, []);
 
-  const type0 = heritageTypes[0];
-  const type1 = heritageTypes[1];
-  const type2 = heritageTypes[2];
-  const type3 = heritageTypes[3];
+  const onApplyHeritageQuery = useCallback(
+    (f: HeritageQueryFormState) => {
+      setActiveHeritageFilters(f);
+      setHeritagePage(1);
+      setHasMoreHeritage(true);
+      loadHeritageData(f, 1, false);
+    },
+    [loadHeritageData],
+  );
+
+  useEffect(() => {
+    const initialFilters: HeritageQueryFormState = {
+      province: '\u8bf7\u9009\u62e9',
+      city: '\u8bf7\u9009\u62e9',
+      district: '\u8bf7\u9009\u62e9',
+      era: '\u5168\u90e8',
+      category: '\u5168\u90e8',
+      batch: '\u5168\u90e8',
+      useAutoLocation: false,
+    };
+    setActiveHeritageFilters(initialFilters);
+    setHeritagePage(1);
+    setHasMoreHeritage(true);
+    loadHeritageFilterOptions();
+    loadHeritageData(initialFilters, 1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (loadMoreSignal <= 0) return;
+    if (loading || loadingMore || !hasMoreHeritage) return;
+    const nextPage = heritagePage + 1;
+    setHeritagePage(nextPage);
+    loadHeritageData(activeHeritageFilters, nextPage, true);
+  }, [
+    activeHeritageFilters,
+    hasMoreHeritage,
+    heritagePage,
+    loadHeritageData,
+    loadMoreSignal,
+    loading,
+    loadingMore,
+  ]);
 
   return (
     <View style={styles.sectionPad}>
-      <GeoLocationFilter
+      <HeritageFilterPanel
         primaryColor={stylesVars.heritagePrimary}
-        showLevelFilter={false}
+        filterOptions={filterOptions}
+        onApplyQuery={onApplyHeritageQuery}
       />
 
-      <View style={styles.contentSection}>
-        <View style={styles.dynastySectionHeader}>
-          <View style={styles.labelRowTight}>
-            <View style={styles.dot} />
-            <Text style={styles.contentTitle}>朝代年轮</Text>
-          </View>
-          <Text style={styles.categoryLabel}>DYNASTY</Text>
+      {heritageHint ? (
+        <Text style={styles.filterResultHint}>{heritageHint}</Text>
+      ) : null}
+
+      {loading && heritageResults.length === 0 ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={stylesVars.heritagePrimary} />
+          <Text style={styles.loadingText}>
+            {'\u6b63\u5728\u52a0\u8f7d\u91cd\u70b9\u6587\u4fdd...'}
+          </Text>
         </View>
-        <View style={styles.dynastyGrid}>
-          {HERITAGE_DYNASTIES.map((item) => (
+      ) : error ? (
+        <View style={styles.catalogEmptyBox}>
+          <Text style={styles.catalogEmptyTitle}>
+            {'\u52a0\u8f7d\u5931\u8d25'}
+          </Text>
+          <Text style={styles.catalogEmptyHint}>{error}</Text>
+        </View>
+      ) : heritageResults.length === 0 ? (
+        <View style={styles.catalogEmptyBox}>
+          <Text style={styles.catalogEmptyTitle}>
+            {'\u6682\u65e0\u7b26\u5408\u7b5b\u9009\u7684\u91cd\u70b9\u6587\u4fdd'}
+          </Text>
+          {heritageHint ? (
+            <Text style={styles.catalogEmptyHint}>{heritageHint}</Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={styles.museumList}>
+        {heritageResults.map((item) => (
+          hasValidImage(item.image) ? (
             <TouchableOpacity
-              key={item.label}
-              style={[
-                styles.dynastyCard,
-                item.active && styles.dynastyCardActive,
-              ]}
-              activeOpacity={0.9}
+              key={item.id}
+              style={styles.museumCard}
+              activeOpacity={0.92}
             >
-              <Text
-                style={[
-                  styles.dynastyYears,
-                  item.active && styles.dynastyYearsActive,
-                ]}
-              >
-                {item.years}
-              </Text>
-              <View style={styles.dynastyTextBlock}>
-                <Text
-                  style={[
-                    styles.dynastyLabel,
-                    item.active && styles.dynastyLabelActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.dynastySubtitle,
-                    item.active && styles.dynastySubtitleActive,
-                  ]}
-                >
-                  {`${item.label} DYNASTY`}
-                </Text>
+              <Image source={{ uri: item.image }} style={styles.museumImage} />
+              <View style={styles.museumTagRow}>
+                {item.tags.map((tag, index) => (
+                  <Text
+                    key={tag}
+                    style={[
+                      styles.museumImageTag,
+                      index === 1 && styles.museumImageTagLight,
+                    ]}
+                  >
+                    {tag}
+                  </Text>
+                ))}
+              </View>
+              <View style={styles.museumCardBody}>
+                <View>
+                  <Text style={styles.museumTitle}>{item.title}</Text>
+                  <View style={styles.locationRow}>
+                    <MapPin size={12} color={Colors.textMuted} />
+                    <Text style={styles.locationText}>{item.location}</Text>
+                  </View>
+                </View>
               </View>
             </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.contentSection}>
-        <View style={styles.categorySectionHeader}>
-          <View style={styles.categoryTitleRow}>
-            <View style={styles.dot} />
-            <Text style={styles.contentTitle}>类别志趣</Text>
-          </View>
-          <Text style={styles.categoryLabel}>CATEGORY</Text>
-        </View>
-
-        {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={stylesVars.heritagePrimary} />
-            <Text style={styles.loadingText}>正在加载重点文保...</Text>
-          </View>
-        ) : error ? (
-          <View style={styles.catalogEmptyBox}>
-            <Text style={styles.catalogEmptyTitle}>加载失败</Text>
-            <Text style={styles.catalogEmptyHint}>{error}</Text>
-          </View>
-        ) : (
-          <View style={styles.heritageTypeStack}>
-            {type0 ? (
-              <ImageBackground
-                source={{ uri: type0.image }}
-                imageStyle={styles.heritageImage}
-                style={[styles.heritageTypeCard, styles.heritageWide]}
-              >
-                <LinearGradient
-                  colors={['rgba(0,0,0,0.14)', 'rgba(0,0,0,0.74)']}
-                  style={styles.heritageOverlay}
-                >
-                  <Text style={styles.heritageTypeTitle}>{type0.title}</Text>
-                  <Text style={styles.heritageTypeSubtitle}>{type0.subtitle}</Text>
-                </LinearGradient>
-                <View style={styles.heritageBadge}>
-                  <Landmark
-                    size={15}
-                    color={stylesVars.heritagePrimary}
-                    strokeWidth={2.2}
-                  />
+          ) : (
+            <View key={item.id} style={styles.textOnlyResultItem}>
+              <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+              <View style={styles.locationRow}>
+                <MapPin size={12} color={Colors.textMuted} />
+                <Text style={styles.locationText}>{item.location}</Text>
+              </View>
+              {item.tags.length > 0 ? (
+                <View style={styles.textOnlyTagsRow}>
+                  {item.tags.map((tag) => (
+                    <Text key={tag} style={styles.textOnlyTag}>
+                      {tag}
+                    </Text>
+                  ))}
                 </View>
-              </ImageBackground>
-            ) : null}
-
-            <View style={styles.heritagePairRow}>
-              {type1 ? (
-                <ImageBackground
-                  source={{ uri: type1.image }}
-                  imageStyle={styles.heritageImage}
-                  style={[styles.heritageTypeCard, styles.heritageHalf]}
-                >
-                  <LinearGradient
-                    colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
-                    style={styles.heritageOverlay}
-                  >
-                    <Text style={styles.heritageTypeTitle}>{type1.title}</Text>
-                    <Text style={styles.heritageTypeSubtitle}>{type1.subtitle}</Text>
-                  </LinearGradient>
-                </ImageBackground>
-              ) : null}
-              {type2 ? (
-                <ImageBackground
-                  source={{ uri: type2.image }}
-                  imageStyle={styles.heritageImage}
-                  style={[styles.heritageTypeCard, styles.heritageHalf]}
-                >
-                  <LinearGradient
-                    colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.72)']}
-                    style={styles.heritageOverlay}
-                  >
-                    <Text style={styles.heritageTypeTitle}>{type2.title}</Text>
-                    <Text style={styles.heritageTypeSubtitle}>{type2.subtitle}</Text>
-                  </LinearGradient>
-                </ImageBackground>
               ) : null}
             </View>
-
-            {type3 ? (
-              <ImageBackground
-                source={{ uri: type3.image }}
-                imageStyle={styles.heritageImage}
-                style={[styles.heritageTypeCard, styles.heritageWide]}
-              >
-                <LinearGradient
-                  colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.68)']}
-                  style={styles.heritageOverlay}
-                >
-                  <Text style={styles.heritageTypeTitle}>{type3.title}</Text>
-                  <Text style={styles.heritageTypeSubtitle}>{type3.subtitle}</Text>
-                </LinearGradient>
-                <View style={styles.heritageBadge}>
-                  <Swords
-                    size={15}
-                    color={stylesVars.heritagePrimary}
-                    strokeWidth={2.1}
-                  />
-                </View>
-              </ImageBackground>
-            ) : null}
-          </View>
-        )}
+          )
+        ))}
       </View>
 
-      <View style={styles.contentSection}>
-        <View style={styles.sliderHeader}>
-          <View style={styles.labelRow}>
-            <View style={styles.dot} />
-            <Text style={styles.contentTitle}>足迹范围</Text>
-          </View>
-          <View style={styles.sliderValue}>
-            <Text style={styles.sliderValueText}>50 KM</Text>
-          </View>
-        </View>
-        <View style={styles.sliderTrack}>
-          <View style={styles.sliderActive} />
-          <View style={styles.sliderThumb} />
-        </View>
-        <View style={styles.sliderLabels}>
-          <Text style={styles.sliderLabelText}>Nearby</Text>
-          <Text style={styles.sliderLabelText}>Faraway</Text>
-        </View>
-      </View>
-
-      <TouchableOpacity style={styles.primaryCTA} activeOpacity={0.92}>
-        <Text style={styles.primaryCTAText}>开启寻迹之旅</Text>
-      </TouchableOpacity>
+      {hasMoreHeritage ? (
+        <Text style={styles.loadMoreHint}>继续下拉加载下一页（每页 5 条）</Text>
+      ) : null}
+      {loadingMore ? (
+        <Text style={styles.loadMoreHint}>正在加载更多内容...</Text>
+      ) : null}
     </View>
   );
 }
@@ -545,57 +646,115 @@ export function HeritageDirectoryScreen() {
   );
 }
 
-export function MuseumDirectoryContent() {
+export function MuseumDirectoryContent({
+  loadMoreSignal = 0,
+}: MuseumDirectoryContentProps = {}) {
   const [museumResults, setMuseumResults] = useState<MuseumCardItem[]>(() => [
     ...MUSEUM_CARDS,
   ]);
+  const [museumPage, setMuseumPage] = useState(1);
+  const [hasMoreMuseum, setHasMoreMuseum] = useState(true);
+  const [activeMuseumFilters, setActiveMuseumFilters] =
+    useState<MuseumQueryFormState>({
+      province: '\u8bf7\u9009\u62e9',
+      city: '\u8bf7\u9009\u62e9',
+      district: '\u8bf7\u9009\u62e9',
+      sortBy: '\u79bb\u6211\u6700\u8fd1',
+      useAutoLocation: false,
+    });
   const [museumHint, setMuseumHint] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadMuseumData = useCallback(async (f: MuseumQueryFormState) => {
-    setLoading(true);
+  const loadMuseumData = useCallback(async (
+    f: MuseumQueryFormState,
+    page: number,
+    append: boolean,
+  ) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
-      // 使用真实数据库查询
       const data = await queryMuseums({
-        province: f.province !== '请选择' ? f.province : undefined,
-        city: f.city !== '请选择' ? f.city : undefined,
-        district: f.district !== '请选择' ? f.district : undefined,
+        province: f.province !== '\u8bf7\u9009\u62e9' ? f.province : undefined,
+        city: f.city !== '\u8bf7\u9009\u62e9' ? f.city : undefined,
+        district: f.district !== '\u8bf7\u9009\u62e9' ? f.district : undefined,
         sortBy: f.sortBy,
+        page,
+        pageSize: PAGE_SIZE,
       });
-      setMuseumResults(data.length > 0 ? data : []);
-      setMuseumHint(formatMuseumResultHint(f, data.length));
+      setHasMoreMuseum(data.length === PAGE_SIZE);
+      setMuseumResults((prev) => {
+        const next = append ? [...prev, ...data] : data;
+        setMuseumHint(formatMuseumResultHint(f, next.length));
+        return next;
+      });
     } catch (e) {
-      // 数据库查询失败时回退到模拟数据
-      console.warn('数据库查询失败，回退到模拟数据:', e);
-      let next = filterMuseumCards([...MUSEUM_CARDS], f);
-      next = sortMuseumCards(next, f.sortBy);
-      setMuseumResults(next);
-      setMuseumHint(formatMuseumResultHint(f, next.length));
+      console.warn('museum query failed, fallback to mock data', e);
+      if (!append) {
+        let next = filterMuseumCards([...MUSEUM_CARDS], f);
+        next = sortMuseumCards(next, f.sortBy);
+        const paged = next.slice(0, PAGE_SIZE);
+        setMuseumResults(paged);
+        setMuseumHint(formatMuseumResultHint(f, paged.length));
+        setHasMoreMuseum(next.length > PAGE_SIZE);
+      } else {
+        setHasMoreMuseum(false);
+      }
     } finally {
-      setLoading(false);
+      if (append) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, []);
 
   const onApplyMuseumQuery = useCallback(
     (f: MuseumQueryFormState) => {
-      loadMuseumData(f);
+      setActiveMuseumFilters(f);
+      setMuseumPage(1);
+      setHasMoreMuseum(true);
+      loadMuseumData(f, 1, false);
     },
     [loadMuseumData],
   );
 
-  // 初始化加载
+  // ????????
   useEffect(() => {
-    loadMuseumData({
-      province: '请选择',
-      city: '请选择',
-      district: '请选择',
-      sortBy: '离我最近',
+    const initialFilters: MuseumQueryFormState = {
+      province: '\u8bf7\u9009\u62e9',
+      city: '\u8bf7\u9009\u62e9',
+      district: '\u8bf7\u9009\u62e9',
+      sortBy: '\u79bb\u6211\u6700\u8fd1',
       useAutoLocation: false,
-    });
+    };
+    setActiveMuseumFilters(initialFilters);
+    setMuseumPage(1);
+    setHasMoreMuseum(true);
+    loadMuseumData(initialFilters, 1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (loadMoreSignal <= 0) return;
+    if (loading || loadingMore || !hasMoreMuseum) return;
+    const nextPage = museumPage + 1;
+    setMuseumPage(nextPage);
+    loadMuseumData(activeMuseumFilters, nextPage, true);
+  }, [
+    activeMuseumFilters,
+    hasMoreMuseum,
+    loadMoreSignal,
+    loading,
+    loadingMore,
+    loadMuseumData,
+    museumPage,
+  ]);
 
   return (
     <View style={styles.sectionPad}>
@@ -608,7 +767,7 @@ export function MuseumDirectoryContent() {
         <Text style={styles.filterResultHint}>{museumHint}</Text>
       ) : null}
 
-      {loading ? (
+      {loading && museumResults.length === 0 ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color={stylesVars.heritagePrimary} />
           <Text style={styles.loadingText}>正在加载博物馆...</Text>
@@ -629,47 +788,70 @@ export function MuseumDirectoryContent() {
 
       <View style={styles.museumList}>
         {museumResults.map((item) => (
-          <TouchableOpacity
-            key={item.id}
-            style={styles.museumCard}
-            activeOpacity={0.92}
-          >
-            <Image source={{ uri: item.image }} style={styles.museumImage} />
-            <View style={styles.museumTagRow}>
-              {item.tags.map((tag, index) => (
-                <Text
-                  key={tag}
-                  style={[
-                    styles.museumImageTag,
-                    index === 1 && styles.museumImageTagLight,
-                  ]}
-                >
-                  {tag}
-                </Text>
-              ))}
-            </View>
-            <View style={styles.museumCardBody}>
-              <View>
-                <Text style={styles.museumTitle}>{item.title}</Text>
-                <View style={styles.locationRow}>
-                  <MapPin size={12} color={Colors.textMuted} />
-                  <Text style={styles.locationText}>{item.location}</Text>
-                </View>
+          hasValidImage(item.image) ? (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.museumCard}
+              activeOpacity={0.92}
+            >
+              <Image source={{ uri: item.image }} style={styles.museumImage} />
+              <View style={styles.museumTagRow}>
+                {item.tags.map((tag, index) => (
+                  <Text
+                    key={tag}
+                    style={[
+                      styles.museumImageTag,
+                      index === 1 && styles.museumImageTagLight,
+                    ]}
+                  >
+                    {tag}
+                  </Text>
+                ))}
               </View>
-              <Text style={styles.museumDistance}>{item.distance}</Text>
+              <View style={styles.museumCardBody}>
+                <View>
+                  <Text style={styles.museumTitle}>{item.title}</Text>
+                  <View style={styles.locationRow}>
+                    <MapPin size={12} color={Colors.textMuted} />
+                    <Text style={styles.locationText}>{item.location}</Text>
+                  </View>
+                </View>
+                <Text style={styles.museumDistance}>{item.distance}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View key={item.id} style={styles.textOnlyResultItem}>
+              <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+              <View style={styles.locationRow}>
+                <MapPin size={12} color={Colors.textMuted} />
+                <Text style={styles.locationText}>{item.location}</Text>
+              </View>
+              {item.tags.length > 0 ? (
+                <View style={styles.textOnlyTagsRow}>
+                  {item.tags.map((tag) => (
+                    <Text key={tag} style={styles.textOnlyTag}>
+                      {tag}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
             </View>
-          </TouchableOpacity>
+          )
         ))}
       </View>
 
-      <View style={styles.loadMoreArea}>
-        <TouchableOpacity style={styles.loadMoreButton} activeOpacity={0.9}>
-          <Text style={styles.loadMoreText}>加载更多博物馆</Text>
-        </TouchableOpacity>
-        <Text style={styles.loadMoreHint}>
-          已显示 {museumResults.length} 条（示例数据，点击「查询」按筛选刷新）
-        </Text>
-      </View>
+      {hasMoreMuseum ? (
+        <View style={styles.loadMoreArea}>
+          <Text style={styles.loadMoreHint}>
+            {'\u7ee7\u7eed\u4e0b\u62c9\u52a0\u8f7d\u4e0b\u4e00\u9875\uff08\u6bcf\u9875 5 \u6761\uff09'}
+          </Text>
+        </View>
+      ) : null}
+      {loadingMore ? (
+        <View style={styles.loadMoreArea}>
+          <Text style={styles.loadMoreHint}>{'\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u5185\u5bb9...'}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1385,6 +1567,36 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: stylesVars.heritagePrimary,
+  },
+  textOnlyResultItem: {
+    backgroundColor: Colors.white,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(14,71,83,0.12)',
+  },
+  textOnlyResultTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  textOnlyTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  textOnlyTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: '700',
+    color: stylesVars.heritagePrimary,
+    backgroundColor: 'rgba(14,71,83,0.08)',
+    overflow: 'hidden',
   },
   loadMoreArea: {
     alignItems: 'center',

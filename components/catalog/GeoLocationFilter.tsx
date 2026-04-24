@@ -18,6 +18,7 @@ import { CHINA_REGIONS } from '@/constants/CatalogData';
 import { Colors } from '@/constants/Colors';
 import {
   ALL_DISTRICTS,
+  type HeritageQueryFormState,
   type MuseumQueryFormState,
   type ScenicLocationFormState,
 } from '@/lib/catalog/catalogQueryFilters';
@@ -947,6 +948,355 @@ export function MuseumFilterPanel({
   );
 }
 
+type HeritageFilterOptions = {
+  eras: string[];
+  categories: string[];
+  batches: string[];
+};
+
+type HeritagePickerType =
+  | 'province'
+  | 'city'
+  | 'district'
+  | 'era'
+  | 'category'
+  | 'batch';
+
+type HeritageFilterPanelProps = {
+  primaryColor: string;
+  defaultLocation?: LocationValue;
+  filterOptions: HeritageFilterOptions;
+  onApplyQuery?: (filters: HeritageQueryFormState) => void;
+  queryButtonLabel?: string;
+};
+
+export function HeritageFilterPanel({
+  primaryColor,
+  defaultLocation = DEFAULT_LOCATION,
+  filterOptions,
+  onApplyQuery,
+  queryButtonLabel = '查询',
+}: HeritageFilterPanelProps) {
+  const [isLocating, setIsLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [useAutoLocation, setUseAutoLocation] = useState(false);
+  const [location, setLocation] = useState<LocationValue>(defaultLocation);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerType, setPickerType] = useState<HeritagePickerType>('province');
+  const [era, setEra] = useState('全部');
+  const [category, setCategory] = useState('全部');
+  const [batch, setBatch] = useState('全部');
+
+  const handleRelocate = useCallback(async () => {
+    setIsLocating(true);
+    setUseAutoLocation(true);
+    setLocationError(null);
+    try {
+      const result = await resolveAutoLocation(location.level);
+      if (result.ok) {
+        setLocation(result.location);
+        return;
+      }
+      setUseAutoLocation(false);
+      setLocation(result.fallbackLocation);
+      setLocationError(result.message);
+    } finally {
+      setIsLocating(false);
+    }
+  }, [location.level]);
+
+  const openPicker = (type: HeritagePickerType) => {
+    setPickerType(type);
+    setPickerVisible(true);
+    setUseAutoLocation(false);
+    setLocationError(null);
+  };
+
+  const selectValue = (value: string) => {
+    if (pickerType === 'province') {
+      setLocation({
+        province: value,
+        city: PLACEHOLDER,
+        district: ALL_DISTRICTS,
+        level: location.level,
+      });
+    } else if (pickerType === 'city') {
+      setLocation((prev) => ({ ...prev, city: value, district: ALL_DISTRICTS }));
+    } else if (pickerType === 'district') {
+      setLocation((prev) => ({ ...prev, district: value }));
+    } else if (pickerType === 'era') {
+      setEra(value);
+    } else if (pickerType === 'category') {
+      setCategory(value);
+    } else if (pickerType === 'batch') {
+      setBatch(value);
+    }
+    setLocationError(null);
+    setPickerVisible(false);
+  };
+
+  const pickerData = React.useMemo(() => {
+    if (pickerType === 'province') return CHINA_REGIONS.map((p) => p.name);
+    if (pickerType === 'city') {
+      const province = CHINA_REGIONS.find((v) => v.name === location.province);
+      return province ? province.cities.map((c) => c.name) : [];
+    }
+    if (pickerType === 'district') {
+      const province = CHINA_REGIONS.find((v) => v.name === location.province);
+      const city = province?.cities.find((v) => v.name === location.city);
+      const list = city?.districts ?? [];
+      return [ALL_DISTRICTS, ...list];
+    }
+    if (pickerType === 'era') {
+      return ['全部', ...filterOptions.eras];
+    }
+    if (pickerType === 'category') {
+      return ['全部', ...filterOptions.categories];
+    }
+    return ['全部', ...filterOptions.batches];
+  }, [filterOptions.batches, filterOptions.categories, filterOptions.eras, location.city, location.province, pickerType]);
+
+  const pickerTitleMap: Record<HeritagePickerType, string> = {
+    province: '选择省份',
+    city: '选择城市',
+    district: '选择区县',
+    era: '选择朝代年轮',
+    category: '选择类别志趣',
+    batch: '选择批次类型',
+  };
+
+  const activeValue = (() => {
+    if (pickerType === 'province') return location.province;
+    if (pickerType === 'city') return location.city;
+    if (pickerType === 'district') return location.district;
+    if (pickerType === 'era') return era;
+    if (pickerType === 'category') return category;
+    return batch;
+  })();
+
+  return (
+    <>
+      <View style={museumStyles.filterPanel}>
+        <View style={styles.locationHeaderRow}>
+          <View style={styles.locationTitleGroup}>
+            <MapPinned size={18} color={primaryColor} />
+            <Text style={[styles.locationMainTitle, { color: primaryColor }]}>
+              重点文保筛选
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.autoLocateBtn,
+              useAutoLocation && { backgroundColor: primaryColor },
+            ]}
+            onPress={handleRelocate}
+            disabled={isLocating}
+          >
+            {isLocating ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <LocateFixed
+                size={14}
+                color={useAutoLocation ? Colors.white : primaryColor}
+              />
+            )}
+            <Text
+              style={[
+                styles.autoLocateText,
+                { color: primaryColor },
+                useAutoLocation && styles.autoLocateTextActive,
+              ]}
+            >
+              {isLocating ? '定位中...' : '当前位置'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.locationCurrentDisplay}>
+          <Text style={styles.locationDisplayText}>
+            {useAutoLocation ? '📍 当前位置' : '🗺️ 手动筛选'}：{' '}
+            <Text style={[styles.locationEmphasis, { color: primaryColor }]}>
+              {location.province} · {location.city} · {location.district}
+            </Text>
+          </Text>
+          {useAutoLocation && (
+            <TouchableOpacity
+              onPress={handleRelocate}
+              style={styles.refreshIconWrap}
+            >
+              <RefreshCw size={12} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {locationError ? (
+          <Text style={styles.locationErrorText}>{locationError}</Text>
+        ) : null}
+
+        <View style={styles.manualFilterGrid}>
+          <TouchableOpacity
+            style={styles.pickerTrigger}
+            onPress={() => openPicker('province')}
+          >
+            <Text style={styles.pickerLabel}>省份</Text>
+            <View style={styles.pickerValueRow}>
+              <Text style={styles.pickerValue} numberOfLines={1}>
+                {location.province}
+              </Text>
+              <ChevronDown size={14} color={Colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.pickerTrigger}
+            onPress={() => openPicker('city')}
+            disabled={location.province === PLACEHOLDER}
+          >
+            <Text style={styles.pickerLabel}>城市</Text>
+            <View style={styles.pickerValueRow}>
+              <Text style={styles.pickerValue} numberOfLines={1}>
+                {location.city}
+              </Text>
+              <ChevronDown size={14} color={Colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.pickerTrigger}
+            onPress={() => openPicker('district')}
+            disabled={location.city === PLACEHOLDER}
+          >
+            <Text style={styles.pickerLabel}>区县</Text>
+            <View style={styles.pickerValueRow}>
+              <Text style={styles.pickerValue} numberOfLines={1}>
+                {location.district}
+              </Text>
+              <ChevronDown size={14} color={Colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={heritageStyles.row}>
+          <Text style={heritageStyles.rowLabel}>朝代年轮</Text>
+          <TouchableOpacity
+            style={heritageStyles.rowValue}
+            activeOpacity={0.8}
+            onPress={() => openPicker('era')}
+          >
+            <Text style={[heritageStyles.rowValueText, { color: primaryColor }]}>
+              {era}
+            </Text>
+            <ChevronDown size={14} color={primaryColor} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={heritageStyles.row}>
+          <Text style={heritageStyles.rowLabel}>类别志趣</Text>
+          <TouchableOpacity
+            style={heritageStyles.rowValue}
+            activeOpacity={0.8}
+            onPress={() => openPicker('category')}
+          >
+            <Text style={[heritageStyles.rowValueText, { color: primaryColor }]}>
+              {category}
+            </Text>
+            <ChevronDown size={14} color={primaryColor} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={heritageStyles.row}>
+          <Text style={heritageStyles.rowLabel}>批次类型</Text>
+          <TouchableOpacity
+            style={heritageStyles.rowValue}
+            activeOpacity={0.8}
+            onPress={() => openPicker('batch')}
+          >
+            <Text style={[heritageStyles.rowValueText, { color: primaryColor }]}>
+              {batch}
+            </Text>
+            <ChevronDown size={14} color={primaryColor} />
+          </TouchableOpacity>
+        </View>
+
+        {onApplyQuery ? (
+          <TouchableOpacity
+            style={[filterActionStyles.queryBtn, { backgroundColor: primaryColor }]}
+            activeOpacity={0.92}
+            onPress={() =>
+              onApplyQuery({
+                province: location.province,
+                city: location.city,
+                district: location.district,
+                era,
+                category,
+                batch,
+                useAutoLocation,
+              })
+            }
+          >
+            <Text style={filterActionStyles.queryBtnText}>{queryButtonLabel}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <Modal
+        visible={pickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={styles.modalDismiss}
+            onPress={() => setPickerVisible(false)}
+          />
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: primaryColor }]}>
+                {pickerTitleMap[pickerType]}
+              </Text>
+              <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                <Text style={styles.modalCloseText}>取消</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={pickerData}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.pickerItem}
+                  onPress={() => selectValue(item)}
+                >
+                  <Text
+                    style={[
+                      styles.pickerItemText,
+                      item === activeValue && {
+                        color: primaryColor,
+                        fontWeight: '800',
+                      },
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                  {item === activeValue ? (
+                    <View
+                      style={[
+                        styles.activeDot,
+                        { backgroundColor: primaryColor },
+                      ]}
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              )}
+              style={styles.pickerList}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
 const museumStyles = StyleSheet.create({
   filterPanel: {
     backgroundColor: '#F7F3E9',
@@ -1058,6 +1408,34 @@ const museumStyles = StyleSheet.create({
     gap: 6,
   },
   sortValueText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});
+
+const heritageStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 12,
+  },
+  rowLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  rowValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    maxWidth: '62%',
+  },
+  rowValueText: {
     fontSize: 14,
     fontWeight: '800',
   },
