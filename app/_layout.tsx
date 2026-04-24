@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { CatalogLocationProvider } from '@/contexts/CatalogLocationContext';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -54,17 +55,19 @@ function AuthNavigationShell({ children }: { children: ReactNode }) {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <AuthNavigationShell>
-        <>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style="auto" />
-        </>
-      </AuthNavigationShell>
+      <CatalogLocationProvider>
+        <AuthNavigationShell>
+          <>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+            <StatusBar style="auto" />
+          </>
+        </AuthNavigationShell>
+      </CatalogLocationProvider>
     </AuthProvider>
   );
 }

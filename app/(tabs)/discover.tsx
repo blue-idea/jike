@@ -1,44 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, SafeAreaView,
-  TouchableOpacity, StatusBar, ActivityIndicator, Dimensions, ImageBackground,
+  View, Text, ScrollView, StyleSheet,
+  TouchableOpacity, StatusBar,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
 import { Colors } from '@/constants/Colors';
-import { FEATURED_SITES } from '@/constants/MockData';
 import { SearchBar } from '@/components/discover/SearchBar';
 import { CommonTopBar } from '@/components/ui/CommonTopBar';
-import { Landmark, Search, Map, ChevronDown } from 'lucide-react-native';
+import { useCatalogLocation } from '@/contexts/CatalogLocationContext';
+import { Landmark, Search, Map, MapPin } from 'lucide-react-native';
 import { HeritageDirectoryContent, ScenicSearchContent, MuseumDirectoryContent } from '@/components/catalog/CatalogScreens';
 
-const { width } = Dimensions.get('window');
-
 export default function DiscoverScreen() {
-  const router = useRouter();
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const { homeCatalogLocation } = useCatalogLocation();
   const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'heritage' | 'scenic' | 'museum'>('heritage');
+  const [activeTab, setActiveTab] = useState<'heritage' | 'scenic' | 'museum'>('scenic');
   const [reachedBottom, setReachedBottom] = useState(false);
   const [loadMoreSignals, setLoadMoreSignals] = useState({
     heritage: 0,
     scenic: 0,
     museum: 0,
   });
-
-  useEffect(() => {
-    // Initial fetch mockup
-  }, []);
-
-  const toggleFavorite = (id: string) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const homeLocationLabel = useMemo(() => {
+    if (!homeCatalogLocation) return null;
+    return `${homeCatalogLocation.province} · ${homeCatalogLocation.city}`;
+  }, [homeCatalogLocation]);
 
   useEffect(() => {
     setReachedBottom(false);
@@ -84,14 +70,23 @@ export default function DiscoverScreen() {
               <SearchBar onSearch={setQuery} />
             </View>
           </View>
+          {homeLocationLabel ? (
+            <View style={styles.locationHint}>
+              <MapPin size={14} color={Colors.accent} />
+              <Text style={styles.locationHintText}>
+                当前默认使用首页定位省市：
+                <Text style={styles.locationHintStrong}>{homeLocationLabel}</Text>
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.tabBarContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBarScroll}>
             {[
-              { id: 'heritage', label: '重点文保', icon: Landmark },
               { id: 'scenic', label: 'A级景区', icon: Map },
               { id: 'museum', label: '博物馆', icon: Search },
+              { id: 'heritage', label: '重点文保', icon: Landmark },
             ].map((tab) => (
               <TouchableOpacity
                 key={tab.id}
@@ -147,20 +142,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  cameraEntryBtn: {
+  locationHint: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 8,
+    backgroundColor: '#F4EEE0',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: 12,
-    height: 46,
-    marginTop: -4, // Adjust for search bar alignment
+    marginTop: 10,
   },
-  cameraEntryText: {
-    color: Colors.white,
+  locationHintText: {
+    color: Colors.textSecondary,
     fontSize: 13,
+    flexShrink: 1,
+  },
+  locationHintStrong: {
+    color: Colors.accent,
     fontWeight: '700',
   },
   tabBarContainer: {

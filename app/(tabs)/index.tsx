@@ -16,9 +16,14 @@ import {
   getCurrentLocationWithPermission,
   reverseGeocodeLocation,
 } from '@/lib/location/locationService';
+import {
+  normalizeCatalogLocation,
+  useCatalogLocation,
+} from '@/contexts/CatalogLocationContext';
 import { Bell, MapPin, Sparkles, Mic } from 'lucide-react-native';
 
 export default function HomeScreen() {
+  const { setHomeCatalogLocation } = useCatalogLocation();
   const [location, setLocation] = useState('定位中...');
 
   const refreshHeaderLocation = useCallback(async () => {
@@ -39,13 +44,18 @@ export default function HomeScreen() {
         return;
       }
 
+      const normalizedCatalogLocation = normalizeCatalogLocation(address);
+      if (normalizedCatalogLocation) {
+        setHomeCatalogLocation(normalizedCatalogLocation);
+      }
+
       const city = address.city?.trim() || address.province?.trim() || '当前位置';
       const district = address.district?.trim();
       setLocation(district ? `${city} · ${district}` : city);
     } catch {
       setLocation('定位失败');
     }
-  }, []);
+  }, [setHomeCatalogLocation]);
 
   useEffect(() => {
     refreshHeaderLocation();

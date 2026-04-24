@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -46,6 +46,10 @@ import {
 } from '@/components/catalog/GeoLocationFilter';
 import { SmartImage, SmartImageBackground } from '@/components/ui/SmartImage';
 import {
+  useCatalogLocation,
+  type CatalogLocation,
+} from '@/contexts/CatalogLocationContext';
+import {
   ArrowLeft,
   ArrowRight,
   MapPin,
@@ -92,19 +96,62 @@ interface MuseumDirectoryContentProps {
 }
 
 const PAGE_SIZE = 5;
+const PLACEHOLDER = '\u8bf7\u9009\u62e9';
+const ALL_LEVEL = '\u5168\u90e8\u7b49\u7ea7';
+const ALL = '\u5168\u90e8';
+const SORT_BY_NEAREST = '\u79bb\u6211\u6700\u8fd1';
 
 function hasValidImage(image?: string) {
   return Boolean(image && image.trim());
 }
 
-export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSignal = 0 }: ScenicSearchContentProps) {
-  const initialScenicFilters: ScenicLocationFormState = {
-    province: '\u9655\u897f\u7701',
-    city: '\u897f\u5b89\u5e02',
+function buildScenicDefaultFilters(homeCatalogLocation: CatalogLocation | null): ScenicLocationFormState {
+  return {
+    province: homeCatalogLocation?.province ?? PLACEHOLDER,
+    city: homeCatalogLocation?.city ?? PLACEHOLDER,
     district: ALL_DISTRICTS,
-    level: '\u5168\u90e8\u7b49\u7ea7',
-    useAutoLocation: true,
+    level: ALL_LEVEL,
+    useAutoLocation: Boolean(homeCatalogLocation),
   };
+}
+
+function buildScenicFilterLocation(homeCatalogLocation: CatalogLocation | null) {
+  return {
+    province: homeCatalogLocation?.province ?? PLACEHOLDER,
+    city: homeCatalogLocation?.city ?? PLACEHOLDER,
+    district: ALL_DISTRICTS,
+    level: ALL_LEVEL,
+  };
+}
+
+function buildCommonDirectoryDefaultFilters(homeCatalogLocation: CatalogLocation | null) {
+  return {
+    province: homeCatalogLocation?.province ?? PLACEHOLDER,
+    city: homeCatalogLocation?.city ?? PLACEHOLDER,
+    district: PLACEHOLDER,
+    useAutoLocation: Boolean(homeCatalogLocation),
+  };
+}
+
+function buildCommonFilterLocation(homeCatalogLocation: CatalogLocation | null) {
+  return {
+    province: homeCatalogLocation?.province ?? PLACEHOLDER,
+    city: homeCatalogLocation?.city ?? PLACEHOLDER,
+    district: PLACEHOLDER,
+    level: ALL_LEVEL,
+  };
+}
+
+export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSignal = 0 }: ScenicSearchContentProps) {
+  const { homeCatalogLocation } = useCatalogLocation();
+  const scenicFilterLocation = useMemo(
+    () => buildScenicFilterLocation(homeCatalogLocation),
+    [homeCatalogLocation],
+  );
+  const initialScenicFilters = useMemo(
+    () => buildScenicDefaultFilters(homeCatalogLocation),
+    [homeCatalogLocation],
+  );
   const [scenicResults, setScenicResults] = useState<ScenicFeature[]>([]);
   const [scenicPage, setScenicPage] = useState(1);
   const [hasMoreScenic, setHasMoreScenic] = useState(true);
@@ -179,6 +226,12 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
   }, [normalizeScenicFilters]);
 
   useEffect(() => {
+    setActiveScenicFilters(initialScenicFilters);
+    setScenicPage(1);
+    setHasMoreScenic(true);
+  }, [initialScenicFilters]);
+
+  useEffect(() => {
     setScenicPage(1);
     setHasMoreScenic(true);
     loadScenicData(activeScenicFilters, 1, false);
@@ -207,7 +260,9 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
     <>
       <View style={styles.sectionPad}>
         <GeoLocationFilter
+          key={`scenic-filter-${scenicFilterLocation.province}-${scenicFilterLocation.city}-${scenicFilterLocation.district}`}
           primaryColor={stylesVars.scenicPrimary}
+          defaultLocation={scenicFilterLocation}
           showDistrictFilter={false}
           onApplyQuery={onApplyScenicQuery}
         />
@@ -394,21 +449,27 @@ export function ScenicSearchScreen() {
 export function HeritageDirectoryContent({
   loadMoreSignal = 0,
 }: HeritageDirectoryContentProps = {}) {
+  const { homeCatalogLocation } = useCatalogLocation();
+  const heritageFilterLocation = useMemo(
+    () => buildCommonFilterLocation(homeCatalogLocation),
+    [homeCatalogLocation],
+  );
+  const initialHeritageFilters = useMemo<HeritageQueryFormState>(() => {
+    const defaultLocation = buildCommonDirectoryDefaultFilters(homeCatalogLocation);
+    return {
+      ...defaultLocation,
+      era: ALL,
+      category: ALL,
+      batch: ALL,
+    };
+  }, [homeCatalogLocation]);
   const [heritageResults, setHeritageResults] = useState<MuseumCardItem[]>(() => [
     ...MUSEUM_CARDS,
   ]);
   const [heritagePage, setHeritagePage] = useState(1);
   const [hasMoreHeritage, setHasMoreHeritage] = useState(true);
   const [activeHeritageFilters, setActiveHeritageFilters] =
-    useState<HeritageQueryFormState>({
-      province: '\u8bf7\u9009\u62e9',
-      city: '\u8bf7\u9009\u62e9',
-      district: '\u8bf7\u9009\u62e9',
-      era: '\u5168\u90e8',
-      category: '\u5168\u90e8',
-      batch: '\u5168\u90e8',
-      useAutoLocation: false,
-    });
+    useState<HeritageQueryFormState>(initialHeritageFilters);
   const [heritageHint, setHeritageHint] = useState('');
   const [filterOptions, setFilterOptions] = useState<{
     eras: string[];
@@ -494,22 +555,15 @@ export function HeritageDirectoryContent({
   );
 
   useEffect(() => {
-    const initialFilters: HeritageQueryFormState = {
-      province: '\u8bf7\u9009\u62e9',
-      city: '\u8bf7\u9009\u62e9',
-      district: '\u8bf7\u9009\u62e9',
-      era: '\u5168\u90e8',
-      category: '\u5168\u90e8',
-      batch: '\u5168\u90e8',
-      useAutoLocation: false,
-    };
-    setActiveHeritageFilters(initialFilters);
+    loadHeritageFilterOptions();
+  }, [loadHeritageFilterOptions]);
+
+  useEffect(() => {
+    setActiveHeritageFilters(initialHeritageFilters);
     setHeritagePage(1);
     setHasMoreHeritage(true);
-    loadHeritageFilterOptions();
-    loadHeritageData(initialFilters, 1, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadHeritageData(initialHeritageFilters, 1, false);
+  }, [initialHeritageFilters, loadHeritageData]);
 
   useEffect(() => {
     if (loadMoreSignal <= 0) return;
@@ -530,7 +584,9 @@ export function HeritageDirectoryContent({
   return (
     <View style={styles.sectionPad}>
       <HeritageFilterPanel
+        key={`heritage-filter-${heritageFilterLocation.province}-${heritageFilterLocation.city}-${heritageFilterLocation.district}`}
         primaryColor={stylesVars.heritagePrimary}
+        defaultLocation={heritageFilterLocation}
         filterOptions={filterOptions}
         onApplyQuery={onApplyHeritageQuery}
       />
@@ -649,19 +705,25 @@ export function HeritageDirectoryScreen() {
 export function MuseumDirectoryContent({
   loadMoreSignal = 0,
 }: MuseumDirectoryContentProps = {}) {
+  const { homeCatalogLocation } = useCatalogLocation();
+  const museumFilterLocation = useMemo(
+    () => buildCommonFilterLocation(homeCatalogLocation),
+    [homeCatalogLocation],
+  );
+  const initialMuseumFilters = useMemo<MuseumQueryFormState>(() => {
+    const defaultLocation = buildCommonDirectoryDefaultFilters(homeCatalogLocation);
+    return {
+      ...defaultLocation,
+      sortBy: SORT_BY_NEAREST,
+    };
+  }, [homeCatalogLocation]);
   const [museumResults, setMuseumResults] = useState<MuseumCardItem[]>(() => [
     ...MUSEUM_CARDS,
   ]);
   const [museumPage, setMuseumPage] = useState(1);
   const [hasMoreMuseum, setHasMoreMuseum] = useState(true);
   const [activeMuseumFilters, setActiveMuseumFilters] =
-    useState<MuseumQueryFormState>({
-      province: '\u8bf7\u9009\u62e9',
-      city: '\u8bf7\u9009\u62e9',
-      district: '\u8bf7\u9009\u62e9',
-      sortBy: '\u79bb\u6211\u6700\u8fd1',
-      useAutoLocation: false,
-    });
+    useState<MuseumQueryFormState>(initialMuseumFilters);
   const [museumHint, setMuseumHint] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -724,21 +786,12 @@ export function MuseumDirectoryContent({
     [loadMuseumData],
   );
 
-  // ????????
   useEffect(() => {
-    const initialFilters: MuseumQueryFormState = {
-      province: '\u8bf7\u9009\u62e9',
-      city: '\u8bf7\u9009\u62e9',
-      district: '\u8bf7\u9009\u62e9',
-      sortBy: '\u79bb\u6211\u6700\u8fd1',
-      useAutoLocation: false,
-    };
-    setActiveMuseumFilters(initialFilters);
+    setActiveMuseumFilters(initialMuseumFilters);
     setMuseumPage(1);
     setHasMoreMuseum(true);
-    loadMuseumData(initialFilters, 1, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadMuseumData(initialMuseumFilters, 1, false);
+  }, [initialMuseumFilters, loadMuseumData]);
 
   useEffect(() => {
     if (loadMoreSignal <= 0) return;
@@ -759,7 +812,9 @@ export function MuseumDirectoryContent({
   return (
     <View style={styles.sectionPad}>
       <MuseumFilterPanel
+        key={`museum-filter-${museumFilterLocation.province}-${museumFilterLocation.city}-${museumFilterLocation.district}`}
         primaryColor={stylesVars.heritagePrimary}
+        defaultLocation={museumFilterLocation}
         onApplyQuery={onApplyMuseumQuery}
       />
 
