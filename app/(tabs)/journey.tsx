@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { JOURNEY_TEMPLATES } from '@/constants/MockData';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { CommonTopBar } from '@/components/ui/CommonTopBar';
+import { BrandHeader } from '@/components/ui/BrandHeader';
 import {
   Plus, Route, Clock, MapPin, Sparkles,
   Navigation, Calendar, ChevronRight, Footprints,
@@ -38,7 +38,7 @@ export default function JourneyScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
-      <CommonTopBar 
+      <BrandHeader 
         rightElement={
           <TouchableOpacity style={styles.createBtn} activeOpacity={0.8}>
             <Plus size={16} color={Colors.white} />

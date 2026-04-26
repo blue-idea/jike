@@ -21,6 +21,7 @@ import {
   useCatalogLocation,
 } from '@/contexts/CatalogLocationContext';
 import { Bell, MapPin, Sparkles, Mic } from 'lucide-react-native';
+import { BrandHeader } from '@/components/ui/BrandHeader';
 
 export default function HomeScreen() {
   const { setHomeCatalogLocation } = useCatalogLocation();
@@ -81,8 +82,8 @@ export default function HomeScreen() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
+        <BrandHeader 
+          rightElement={
             <TouchableOpacity
               style={styles.locationRow}
               activeOpacity={0.75}
@@ -91,14 +92,8 @@ export default function HomeScreen() {
               <MapPin size={14} color={Colors.accent} />
               <Text style={styles.location}>{location}</Text>
             </TouchableOpacity>
-            <Text style={styles.greeting}>探寻文化踪迹</Text>
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerBtn}>
-              <Bell size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        </View>
+          }
+        />
       </SafeAreaView>
 
       <ScrollView
@@ -228,49 +223,19 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: Colors.background,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: Colors.background,
-  },
-  headerLeft: {
-    gap: 3,
-  },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(200, 145, 74, 0.1)',
   },
   location: {
     fontSize: 13,
     color: Colors.accent,
-    fontWeight: '500',
-  },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 0.5,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: Colors.text,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
+    fontWeight: '600',
   },
   scroll: {
     flex: 1,

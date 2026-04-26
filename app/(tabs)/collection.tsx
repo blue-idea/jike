@@ -7,7 +7,7 @@ import { Colors } from '@/constants/Colors';
 import { FEATURED_SITES } from '@/constants/MockData';
 import { SiteListCard } from '@/components/discover/SiteListCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
-import { CommonTopBar } from '@/components/ui/CommonTopBar';
+import { BrandHeader } from '@/components/ui/BrandHeader';
 import { Heart, Bookmark, Map, Trash2, FolderOpen } from 'lucide-react-native';
 import { CollectionMapSection } from '@/components/collection/CollectionMapSection';
 
@@ -42,7 +42,7 @@ export default function CollectionScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
-      <CommonTopBar />
+      <BrandHeader />
 
       <ScrollView
         showsVerticalScrollIndicator={false}

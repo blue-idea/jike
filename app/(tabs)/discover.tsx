@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Colors } from '@/constants/Colors';
 import { SearchBar } from '@/components/discover/SearchBar';
-import { CommonTopBar } from '@/components/ui/CommonTopBar';
+import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useCatalogLocation } from '@/contexts/CatalogLocationContext';
 import { Landmark, Search, Map, MapPin } from 'lucide-react-native';
 import { HeritageDirectoryContent, ScenicSearchContent, MuseumDirectoryContent } from '@/components/catalog/CatalogScreens';
@@ -23,7 +23,8 @@ export default function DiscoverScreen() {
   });
   const homeLocationLabel = useMemo(() => {
     if (!homeCatalogLocation) return null;
-    return `${homeCatalogLocation.province} · ${homeCatalogLocation.city}`;
+    if (!homeCatalogLocation.city) return homeCatalogLocation.province;
+    return `${homeCatalogLocation.province} ${homeCatalogLocation.city}`;
   }, [homeCatalogLocation]);
 
   useEffect(() => {
@@ -55,7 +56,18 @@ export default function DiscoverScreen() {
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
-      <CommonTopBar />
+      <BrandHeader
+        rightElement={
+          homeLocationLabel ? (
+            <View style={styles.navLocation}>
+              <MapPin size={14} color={Colors.accent} />
+              <Text style={styles.navLocationText} numberOfLines={1}>
+                {homeLocationLabel}
+              </Text>
+            </View>
+          ) : null
+        }
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -70,15 +82,6 @@ export default function DiscoverScreen() {
               <SearchBar onSearch={setQuery} />
             </View>
           </View>
-          {homeLocationLabel ? (
-            <View style={styles.locationHint}>
-              <MapPin size={14} color={Colors.accent} />
-              <Text style={styles.locationHintText}>
-                当前默认使用首页定位省市：
-                <Text style={styles.locationHintStrong}>{homeLocationLabel}</Text>
-              </Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.tabBarContainer}>
@@ -142,26 +145,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  locationHint: {
+  navLocation: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F4EEE0',
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    marginTop: 10,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(200, 145, 74, 0.1)',
+    maxWidth: 160,
   },
-  locationHintText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    flexShrink: 1,
-  },
-  locationHintStrong: {
+  navLocationText: {
     color: Colors.accent,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
   },
   tabBarContainer: {
     backgroundColor: Colors.background,
