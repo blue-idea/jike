@@ -72,7 +72,6 @@ export default function DiscoverScreen() {
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]}
         onScroll={onDiscoverScroll}
         scrollEventThrottle={16}
       >
@@ -136,6 +135,7 @@ const styles = StyleSheet.create({
   },
   searchSection: {
     backgroundColor: Colors.background,
+    paddingTop: 12,
     paddingBottom: 16,
     paddingHorizontal: 20,
     zIndex: 10,

@@ -1,8 +1,5 @@
 from PIL import Image
-import os
-
-input_path = r"e:\NextCloud\coding\mobile\jike\assets\images\branding\jike_logo_option_5_landscape_v2_1777199172924.png"
-output_path = r"e:\NextCloud\coding\mobile\jike\assets\images\branding\logo_landscape_transparent.png"
+import argparse
 
 def make_transparent_and_crop(img_path, out_path):
     img = Image.open(img_path).convert("RGBA")
@@ -27,4 +24,12 @@ def make_transparent_and_crop(img_path, out_path):
     img.save(out_path, "PNG")
     print(f"Processed image saved to {out_path}")
 
-make_transparent_and_crop(input_path, output_path)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Make white background transparent and crop image.")
+    parser.add_argument("-i", "--input", required=True, help="Path to the input image file")
+    parser.add_argument("-o", "--output", required=True, help="Path to save the processed image file")
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
+    make_transparent_and_crop(args.input, args.output)
