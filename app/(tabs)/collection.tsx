@@ -22,6 +22,7 @@ const COLLECTION_ITEMS = FEATURED_SITES.slice(0, 3);
 export default function CollectionScreen() {
   const [activeTab, setActiveTab] = useState('favorites');
   const [favorites, setFavorites] = useState<Set<string>>(new Set(['fs1', 'fs2', 'fs3']));
+  const [isMapInteracting, setIsMapInteracting] = useState(false);
 
   const toggleFavorite = (id: string) => {
     setFavorites((prev) => {
@@ -43,8 +44,13 @@ export default function CollectionScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
       <CommonTopBar />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <CollectionMapSection />
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!isMapInteracting}
+        disableScrollViewPanResponder={isMapInteracting}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <CollectionMapSection onMapInteractingChange={setIsMapInteracting} />
         <View style={styles.tabContainer}>
           <View style={styles.tabBar}>
             {TABS.map(({ id, label, Icon }) => (

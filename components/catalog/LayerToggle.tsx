@@ -17,8 +17,8 @@ interface LayerToggleProps {
 }
 
 const LAYERS: { key: CultureMapLayer; label: string }[] = [
-  { key: 'scenic', label: '景区' },
-  { key: 'heritage', label: '国保' },
+  { key: 'scenic', label: 'A 级景区' },
+  { key: 'heritage', label: '文保' },
   { key: 'museum', label: '博物馆' },
 ];
 
@@ -52,7 +52,7 @@ export function LayerToggle({
             style={[styles.subBtn, scenicFilter === 'all' && styles.subBtnActive]}
           >
             <Text style={[styles.subBtnText, scenicFilter === 'all' && styles.subBtnTextActive]}>
-              全部
+              全部(4A/5A)
             </Text>
           </TouchableOpacity>
           <TouchableOpacity

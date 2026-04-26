@@ -29,10 +29,10 @@ export const CULTURE_MAP_DEFAULT_CENTER = { lng: 108.948024, lat: 34.263161 };
 export const CULTURE_MAP_DEFAULT_STYLE = 'amap://styles/macaron';
 
 /**
- * 若不在控制台配置样式 ID，仍可通过 setFeatures 略微压低道路存在感（保留道路以便辨向）。
- * 可选：['bg','building','point'] | ['bg','road','building','point'] 等，见高德文档。
+ * 若不在控制台配置样式 ID，仍可通过 features 控制底图元素。
+ * 为避免与文化地标点位混淆，这里默认关闭高德原生 point 层，仅保留背景/道路/建筑。
  */
-export const CULTURE_MAP_FEATURES = ['bg', 'road', 'building', 'point'] as const;
+export const CULTURE_MAP_FEATURES = ['bg', 'road', 'building'] as const;
 
 export const CULTURE_MAP_POIS: CultureMapPoi[] = [
   { id: 'h1', name: '西安城墙（永宁门）', kind: 'heritage', lng: 108.9402, lat: 34.2516 },

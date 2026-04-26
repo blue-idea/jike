@@ -8,16 +8,24 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 interface MapErrorStateProps {
   onRetry: () => void;
+  title?: string;
+  description?: string;
+  retryText?: string;
 }
 
-export function MapErrorState({ onRetry }: MapErrorStateProps) {
+export function MapErrorState({
+  onRetry,
+  title = '网络异常',
+  description = '请检查网络连接后重试',
+  retryText = '重试',
+}: MapErrorStateProps) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.icon}>📡</Text>
-      <Text style={styles.title}>网络异常</Text>
-      <Text style={styles.desc}>请检查网络连接后重试</Text>
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.desc}>{description}</Text>
       <TouchableOpacity style={styles.retryBtn} onPress={onRetry}>
-        <Text style={styles.retryText}>重试</Text>
+        <Text style={styles.retryText}>{retryText}</Text>
       </TouchableOpacity>
     </View>
   );
