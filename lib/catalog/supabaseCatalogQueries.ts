@@ -241,6 +241,8 @@ export async function queryScenicSpots(
     city: r.city || undefined,
     district: r.county || undefined,
     level: r.rating || undefined,
+    lng: typeof r.lng_wgs84 === 'number' ? r.lng_wgs84 : undefined,
+    lat: typeof r.lat_wgs84 === 'number' ? r.lat_wgs84 : undefined,
     distance: undefined,
     rating: undefined,
   }));
@@ -391,6 +393,8 @@ export async function queryHeritageSites(
     provinceFull: r.provincial || undefined,
     cityLabel: r.city || undefined,
     districtLabel: r.county || undefined,
+    lng: typeof r.longitude === 'number' ? r.longitude : undefined,
+    lat: typeof r.latitude === 'number' ? r.latitude : undefined,
   }));
 
   if (keyword && keyword.trim()) {
@@ -458,6 +462,8 @@ export async function queryMuseums(
     provinceFull: r.pname || undefined,
     cityLabel: r.cityname || undefined,
     districtLabel: r.adname || undefined,
+    lng: typeof r.lng === 'number' ? r.lng : undefined,
+    lat: typeof r.lat === 'number' ? r.lat : undefined,
   }));
 
   if (keyword && keyword.trim()) {

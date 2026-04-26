@@ -12,6 +12,8 @@ export interface ScenicFeature {
   city?: string;
   district?: string;
   level?: string;
+  lng?: number;
+  lat?: number;
 }
 
 export interface MuseumCardItem {
@@ -28,6 +30,8 @@ export interface MuseumCardItem {
   qualityLevel?: string;
   nature?: string;
   freeEntry?: boolean;
+  lng?: number;
+  lat?: number;
 }
 
 export const SCENIC_CATEGORY_TABS = [

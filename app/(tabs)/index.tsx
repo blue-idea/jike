@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
-  TouchableOpacity, StatusBar,
+  TouchableOpacity, StatusBar, Modal,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,11 +23,21 @@ import {
 import { MapPin, Sparkles, Mic } from 'lucide-react-native';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useNearbyPois } from '@/hooks/useNearbyPois';
+import { navigateWithGaode, type RoutePoint } from '@/lib/route/routeService';
+import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
 
 export default function HomeScreen() {
   const { setHomeCatalogLocation } = useCatalogLocation();
   const [location, setLocation] = useState('定位中...');
-  const { pois: nearbyPois, loading: nearbyLoading, error: nearbyError, refresh: refreshNearby } =
+  const [fallbackVisible, setFallbackVisible] = useState(false);
+  const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
+  const {
+    pois: nearbyPois,
+    loading: nearbyLoading,
+    error: nearbyError,
+    locationCoords,
+    refresh: refreshNearby,
+  } =
     useNearbyPois({ radiusM: 10000 });
 
   const refreshHeaderLocation = useCallback(async () => {
@@ -84,6 +94,23 @@ export default function HomeScreen() {
       router.push('/scenic-search');
     }
   };
+
+  const handleNavigateNearbyPoi = useCallback(
+    async (poi: (typeof nearbyPois)[number]) => {
+      const destination: RoutePoint = {
+        id: poi.id,
+        name: poi.name,
+        lng: poi.lng,
+        lat: poi.lat,
+      };
+      const strategy = await navigateWithGaode(destination, 'walk');
+      if (strategy === 'webview') {
+        setFallbackDestination(destination);
+        setFallbackVisible(true);
+      }
+    },
+    [nearbyPois],
+  );
 
   return (
     <View style={styles.root}>
@@ -202,7 +229,9 @@ export default function HomeScreen() {
                 image={poi.images?.[0] || FEATURED_SITES[0].image}
                 isFree={poi.poi_type === 'museum'}
                 onPress={() => {}}
-                onNavigate={() => {}}
+                onNavigate={() => {
+                  void handleNavigateNearbyPoi(poi);
+                }}
               />
             ))
           )}
@@ -234,6 +263,38 @@ export default function HomeScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      <Modal
+        visible={fallbackVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setFallbackVisible(false)}
+      >
+        <SafeAreaView style={styles.fallbackWrap}>
+          <View style={styles.fallbackHeader}>
+            <Text style={styles.fallbackTitle}>应用内导航降级</Text>
+            <TouchableOpacity onPress={() => setFallbackVisible(false)}>
+              <Text style={styles.fallbackCloseText}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+          {fallbackDestination ? (
+            <RouteWebViewFallback
+              origin={
+                locationCoords
+                  ? {
+                      id: 'current-location',
+                      name: '我的位置',
+                      lng: locationCoords.lng,
+                      lat: locationCoords.lat,
+                    }
+                  : fallbackDestination
+              }
+              destination={fallbackDestination}
+              mode="walk"
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -357,5 +418,28 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
+  },
+  fallbackWrap: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  fallbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+  },
+  fallbackTitle: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '700',
+  },
+  fallbackCloseText: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '700',
   },
 });

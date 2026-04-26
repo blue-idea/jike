@@ -53,16 +53,64 @@ function buildFallbackHtml(
     var dest = [${destination.lng}, ${destination.lat}];
     var mode = ${amapMode};
     var map = new AMap.Map('container', { zoom: 14, center: origin, viewMode: '2D' });
-    AMap.plugin('AMap.Driving', function() {
-      var driving = new AMap.Driving({ map: map, panel: 'panel', policy: 1 });
-      driving.search(origin, dest, function(err, data) {
-        if (err) {
-          document.getElementById('panel').innerHTML =
-            '<div class="error-msg">路线规划失败，请稍后重试</div>';
-          document.getElementById('panel').classList.add('show');
-        }
+
+    function onError() {
+      document.getElementById('panel').innerHTML =
+        '<div class="error-msg">路线规划失败，请稍后重试</div>';
+      document.getElementById('panel').classList.add('show');
+    }
+
+    function renderRoute() {
+      if (mode === 0) {
+        AMap.plugin('AMap.Driving', function() {
+          var driving = new AMap.Driving({ map: map, panel: 'panel', policy: 1 });
+          driving.search(origin, dest, function(status) {
+            if (status !== 'complete') {
+              onError();
+            } else {
+              document.getElementById('panel').classList.add('show');
+            }
+          });
+        });
+        return;
+      }
+
+      if (mode === 1) {
+        AMap.plugin('AMap.Transfer', function() {
+          var transfer = new AMap.Transfer({
+            map: map,
+            panel: 'panel',
+            city: '全国',
+            policy: AMap.TransferPolicy.LEAST_TIME
+          });
+          transfer.search(origin, dest, function(status) {
+            if (status !== 'complete') {
+              onError();
+            } else {
+              document.getElementById('panel').classList.add('show');
+            }
+          });
+        });
+        return;
+      }
+
+      AMap.plugin('AMap.Walking', function() {
+        var walking = new AMap.Walking({ map: map, panel: 'panel' });
+        walking.search(origin, dest, function(status) {
+          if (status !== 'complete') {
+            onError();
+          } else {
+            document.getElementById('panel').classList.add('show');
+          }
+        });
       });
-    });
+    }
+
+    try {
+      renderRoute();
+    } catch (_e) {
+      onError();
+    }
   </script>
 </body>
 </html>`;

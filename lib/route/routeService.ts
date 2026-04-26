@@ -31,6 +31,67 @@ export interface RouteResult {
   segments: RouteSegment[];
 }
 
+const AMAP_WEB_APP_NAME = 'jike';
+
+interface AmapDrivingStep {
+  instruction?: string;
+  distance?: string;
+  duration?: string;
+  road?: string;
+}
+
+interface AmapWalkingStep {
+  instruction?: string;
+  distance?: string;
+  duration?: string;
+  road?: string;
+}
+
+interface AmapTransitWalkingStep {
+  instruction?: string;
+  distance?: string;
+  duration?: string;
+}
+
+interface AmapTransitBusline {
+  name?: string;
+  departure_stop?: { name?: string };
+  arrival_stop?: { name?: string };
+  distance?: string;
+  duration?: string;
+}
+
+interface AmapTransitSegment {
+  walking?: { distance?: string; duration?: string; steps?: AmapTransitWalkingStep[] };
+  bus?: { buslines?: AmapTransitBusline[] };
+}
+
+interface AmapJsonResponse {
+  status?: string;
+  info?: string;
+  route?: {
+    paths?: {
+      distance?: string;
+      duration?: string;
+      steps?: (AmapDrivingStep | AmapWalkingStep)[];
+    }[];
+    transits?: {
+      distance?: string;
+      duration?: string;
+      segments?: AmapTransitSegment[];
+    }[];
+  };
+}
+
+function parseNumber(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
 /** 高德 Web API 路径规划（驾车/公交/步行） */
 export async function queryGaodeRoute(
   from: LocationCoords,
@@ -40,19 +101,19 @@ export async function queryGaodeRoute(
   const key = process.env.EXPO_PUBLIC_AMAP_KEY;
   if (!key) throw new Error('缺少高德 API Key（EXPO_PUBLIC_AMAP_KEY）');
 
-  const typeMap: Record<RouteMode, string> = {
-    drive: '10',
-    bus: '30',
-    walk: '20',
-  };
-
   const params = new URLSearchParams({
     key,
     origin: `${from.lng},${from.lat}`,
     destination: `${to.lng},${to.lat}`,
-    type: typeMap[mode],
     output: 'json',
   });
+
+  if (mode === 'bus') {
+    params.set('city', '全国');
+    params.set('cityd', '全国');
+    params.set('strategy', '0');
+    params.set('nightflag', '0');
+  }
 
   const baseUrl =
     mode === 'bus'
@@ -63,36 +124,65 @@ export async function queryGaodeRoute(
 
   const res = await fetch(`${baseUrl}?${params}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
+  const json = (await res.json()) as AmapJsonResponse;
 
   if (json.status !== '1') {
     throw new Error(json.info ?? '路径规划失败');
   }
 
   if (mode === 'bus') {
-    const transit = json.route?.transit_container?.transit_line?.[0];
+    const transit = json.route?.transits?.[0];
     if (!transit) throw new Error('未找到公交方案');
+    const segments: RouteSegment[] = [];
+    for (const segment of transit.segments ?? []) {
+      const walking = segment.walking;
+      if (walking && parseNumber(walking.distance) > 0) {
+        const firstStep = walking.steps?.[0];
+        segments.push({
+          instruction: firstStep?.instruction ?? '步行接驳',
+          distance: parseNumber(walking.distance),
+          duration: parseNumber(walking.duration),
+          road_name: firstStep?.instruction ?? '步行',
+        });
+      }
+
+      const busline = segment.bus?.buslines?.[0];
+      if (busline && parseNumber(busline.distance) > 0) {
+        const dep = busline.departure_stop?.name ?? '起点站';
+        const arr = busline.arrival_stop?.name ?? '终点站';
+        const lineName = busline.name ?? '公交';
+        segments.push({
+          instruction: `${lineName}（${dep} -> ${arr}）`,
+          distance: parseNumber(busline.distance),
+          duration: parseNumber(busline.duration),
+          road_name: lineName,
+        });
+      }
+    }
+
     return {
-      total_distance: Number(transit.distance ?? 0),
-      total_duration: Number(transit.duration ?? 0),
-      route_id: transit.uid ?? '',
-      segments: (transit.segments ?? []).map((s: Record<string, Record<string, number | string>>) => ({
-        instruction: String(s.instruction ?? ''),
-        distance: Number(s.walk?.distance ?? s.bus?.distance ?? 0),
-        duration: Number(s.walk?.duration ?? s.bus?.duration ?? 0),
-        road_name: '',
-      })),
+      total_distance: parseNumber(transit.distance),
+      total_duration: parseNumber(transit.duration),
+      route_id: `bus-${Date.now()}`,
+      segments,
     };
   }
 
   // driving / walking
-  const path = json.route?.paths?.path?.[0];
+  const path = json.route?.paths?.[0];
   if (!path) throw new Error('未找到路线');
+  const segments: RouteSegment[] = (path.steps ?? []).map((step) => ({
+    instruction: step.instruction ?? '',
+    distance: parseNumber(step.distance),
+    duration: parseNumber(step.duration),
+    road_name: step.road ?? '',
+  }));
+
   return {
-    total_distance: Number(path.distance ?? 0),
-    total_duration: Number(path.duration ?? 0),
-    route_id: json.route?.road ?? '',
-    segments: [],
+    total_distance: parseNumber(path.distance),
+    total_duration: parseNumber(path.duration),
+    route_id: `${mode}-${Date.now()}`,
+    segments,
   };
 }
 
@@ -150,10 +240,14 @@ export async function navigateWithGaode(
   mode: RouteMode,
 ): Promise<'app' | 'webview'> {
   const uri = buildGaodeUri(dest, mode);
-  const canOpen = await Linking.canOpenURL(uri);
-  if (canOpen) {
-    await Linking.openURL(uri);
-    return 'app';
+  try {
+    const canOpen = await Linking.canOpenURL(uri);
+    if (canOpen) {
+      await Linking.openURL(uri);
+      return 'app';
+    }
+  } catch {
+    // ignore and fallback
   }
   return 'webview';
 }
@@ -161,12 +255,13 @@ export async function navigateWithGaode(
 /** 构建高德 URI */
 export function buildGaodeUri(dest: RoutePoint, mode: RouteMode): string {
   const name = encodeURIComponent(dest.name);
-  const coord = encodeURIComponent(`${dest.lng},${dest.lat}`);
-  if (mode === 'walk') {
-    return `amap://walking?rideType=1&start=${encodeURIComponent('我的位置')}&destination=${coord}&name=${name}`;
-  }
+  const lng = encodeURIComponent(String(dest.lng));
+  const lat = encodeURIComponent(String(dest.lat));
   if (mode === 'drive') {
-    return `amap://navi?dest=${coord}&destName=${name}&dev=1&m=1`;
+    return `androidamap://navi?sourceApplication=${AMAP_WEB_APP_NAME}&lat=${lat}&lon=${lng}&dev=0&style=2&poiname=${name}`;
   }
-  return `amap://navigation?dev=1&m=1& poiname=${name}&poitype=交通设施&dest=${coord}&destName=${name}`;
+  if (mode === 'walk') {
+    return `amapuri://route/plan/?sourceApplication=${AMAP_WEB_APP_NAME}&dlat=${lat}&dlon=${lng}&dname=${name}&dev=0&t=2`;
+  }
+  return `amapuri://route/plan/?sourceApplication=${AMAP_WEB_APP_NAME}&dlat=${lat}&dlon=${lng}&dname=${name}&dev=0&t=1`;
 }

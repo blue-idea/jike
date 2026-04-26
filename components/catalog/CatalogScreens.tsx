@@ -1,7 +1,9 @@
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -39,6 +41,9 @@ import {
   queryMuseums,
   queryScenicSpots,
 } from '@/lib/catalog/supabaseCatalogQueries';
+import { navigateWithGaode, type RoutePoint } from '@/lib/route/routeService';
+import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
+import { getCurrentLocationWithPermission } from '@/lib/location/locationService';
 import {
   GeoLocationFilter,
   HeritageFilterPanel,
@@ -53,6 +58,7 @@ import {
   ArrowLeft,
   ArrowRight,
   MapPin,
+  Navigation,
   Star,
 } from 'lucide-react-native';
 
@@ -142,6 +148,77 @@ function buildCommonFilterLocation(homeCatalogLocation: CatalogLocation | null) 
   };
 }
 
+function buildDestinationPoint(item: {
+  id: string;
+  title: string;
+  lng?: number;
+  lat?: number;
+}): RoutePoint | null {
+  if (typeof item.lng !== 'number' || typeof item.lat !== 'number') {
+    return null;
+  }
+  return {
+    id: item.id,
+    name: item.title,
+    lng: item.lng,
+    lat: item.lat,
+  };
+}
+
+function useCatalogNavigationFallback() {
+  const [fallbackVisible, setFallbackVisible] = useState(false);
+  const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
+  const [fallbackOrigin, setFallbackOrigin] = useState<RoutePoint | null>(null);
+
+  const openFallbackForDestination = useCallback(async (destination: RoutePoint) => {
+    const currentLocation = await getCurrentLocationWithPermission();
+    const origin: RoutePoint = currentLocation.coords
+      ? {
+          id: 'current-location',
+          name: '我的位置',
+          lng: currentLocation.coords.lng,
+          lat: currentLocation.coords.lat,
+        }
+      : {
+          // 定位失败时兜底为目的地附近点，确保可展示降级导航页
+          id: `${destination.id}-origin`,
+          name: '附近位置',
+          lng: destination.lng - 0.0005,
+          lat: destination.lat - 0.0005,
+        };
+    setFallbackDestination(destination);
+    setFallbackOrigin(origin);
+    setFallbackVisible(true);
+  }, []);
+
+  const fallbackModal = (
+    <Modal
+      visible={fallbackVisible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setFallbackVisible(false)}
+    >
+      <SafeAreaView style={styles.scenicFallbackWrap}>
+        <View style={styles.scenicFallbackHeader}>
+          <Text style={styles.scenicFallbackTitle}>应用内导航降级</Text>
+          <TouchableOpacity onPress={() => setFallbackVisible(false)}>
+            <Text style={styles.scenicFallbackCloseText}>关闭</Text>
+          </TouchableOpacity>
+        </View>
+        {fallbackDestination ? (
+          <RouteWebViewFallback
+            origin={fallbackOrigin ?? fallbackDestination}
+            destination={fallbackDestination}
+            mode="walk"
+          />
+        ) : null}
+      </SafeAreaView>
+    </Modal>
+  );
+
+  return { openFallbackForDestination, fallbackModal };
+}
+
 export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSignal = 0 }: ScenicSearchContentProps) {
   const { homeCatalogLocation } = useCatalogLocation();
   const scenicFilterLocation = useMemo(
@@ -162,6 +239,7 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { openFallbackForDestination, fallbackModal } = useCatalogNavigationFallback();
   const normalizeScenicFilters = useCallback((f: ScenicLocationFormState): ScenicLocationFormState => ({
     ...f,
     district: ALL_DISTRICTS,
@@ -255,6 +333,19 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
 
   const hero = scenicResults[0];
   const scenicCards = scenicResults.slice(1);
+  const handleScenicNavigate = useCallback(async (item: ScenicFeature) => {
+    const destination = buildDestinationPoint(item);
+    if (!destination) {
+      Alert.alert('暂不支持导航', '该景区缺少坐标信息');
+      return;
+    }
+
+    const navResult = await navigateWithGaode(destination, 'walk');
+
+    if (navResult === 'webview') {
+      await openFallbackForDestination(destination);
+    }
+  }, [openFallbackForDestination]);
 
   return (
     <>
@@ -360,9 +451,15 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
                     style={styles.scenicCardImage}
                     fallbackSource={SCENIC_FALLBACK_IMAGE}
                   />
-                  <View style={styles.distancePill}>
-                    <Text style={styles.distancePillText}>{item.distance}</Text>
-                  </View>
+                  <TouchableOpacity
+                    style={styles.scenicNavIcon}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      void handleScenicNavigate(item);
+                    }}
+                  >
+                    <Navigation size={13} color={Colors.primary} />
+                  </TouchableOpacity>
                   <View style={styles.cardBody}>
                     <Text style={styles.cardTitle}>{item.title}</Text>
                     <View style={styles.tagRow}>
@@ -423,6 +520,7 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
           <Image source={{ uri: SCENIC_MAP_IMAGE }} style={styles.mapPreview} />
         </View>
       </View>
+      {fallbackModal}
     </>
   );
 }
@@ -483,6 +581,7 @@ export function HeritageDirectoryContent({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { openFallbackForDestination, fallbackModal } = useCatalogNavigationFallback();
 
   const loadHeritageData = useCallback(async (
     f: HeritageQueryFormState,
@@ -581,6 +680,18 @@ export function HeritageDirectoryContent({
     loadingMore,
   ]);
 
+  const handleHeritageNavigate = useCallback(async (item: MuseumCardItem) => {
+    const destination = buildDestinationPoint(item);
+    if (!destination) {
+      Alert.alert('暂不支持导航', '该文保点位缺少坐标信息');
+      return;
+    }
+    const navResult = await navigateWithGaode(destination, 'walk');
+    if (navResult === 'webview') {
+      await openFallbackForDestination(destination);
+    }
+  }, [openFallbackForDestination]);
+
   return (
     <View style={styles.sectionPad}>
       <HeritageFilterPanel
@@ -642,6 +753,15 @@ export function HeritageDirectoryContent({
                   </Text>
                 ))}
               </View>
+              <TouchableOpacity
+                style={styles.scenicNavIcon}
+                activeOpacity={0.85}
+                onPress={() => {
+                  void handleHeritageNavigate(item);
+                }}
+              >
+                <Navigation size={13} color={Colors.primary} />
+              </TouchableOpacity>
               <View style={styles.museumCardBody}>
                 <View>
                   <Text style={styles.museumTitle}>{item.title}</Text>
@@ -654,7 +774,18 @@ export function HeritageDirectoryContent({
             </TouchableOpacity>
           ) : (
             <View key={item.id} style={styles.textOnlyResultItem}>
-              <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+              <View style={styles.textOnlyHeader}>
+                <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+                <TouchableOpacity
+                  style={styles.listNavBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    void handleHeritageNavigate(item);
+                  }}
+                >
+                  <Navigation size={13} color={Colors.primary} />
+                </TouchableOpacity>
+              </View>
               <View style={styles.locationRow}>
                 <MapPin size={12} color={Colors.textMuted} />
                 <Text style={styles.locationText}>{item.location}</Text>
@@ -679,6 +810,7 @@ export function HeritageDirectoryContent({
       {loadingMore ? (
         <Text style={styles.loadMoreHint}>正在加载更多内容...</Text>
       ) : null}
+      {fallbackModal}
     </View>
   );
 }
@@ -728,6 +860,7 @@ export function MuseumDirectoryContent({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { openFallbackForDestination, fallbackModal } = useCatalogNavigationFallback();
 
   const loadMuseumData = useCallback(async (
     f: MuseumQueryFormState,
@@ -809,6 +942,18 @@ export function MuseumDirectoryContent({
     museumPage,
   ]);
 
+  const handleMuseumNavigate = useCallback(async (item: MuseumCardItem) => {
+    const destination = buildDestinationPoint(item);
+    if (!destination) {
+      Alert.alert('暂不支持导航', '该博物馆缺少坐标信息');
+      return;
+    }
+    const navResult = await navigateWithGaode(destination, 'walk');
+    if (navResult === 'webview') {
+      await openFallbackForDestination(destination);
+    }
+  }, [openFallbackForDestination]);
+
   return (
     <View style={styles.sectionPad}>
       <MuseumFilterPanel
@@ -863,6 +1008,15 @@ export function MuseumDirectoryContent({
                   </Text>
                 ))}
               </View>
+              <TouchableOpacity
+                style={styles.scenicNavIcon}
+                activeOpacity={0.85}
+                onPress={() => {
+                  void handleMuseumNavigate(item);
+                }}
+              >
+                <Navigation size={13} color={Colors.primary} />
+              </TouchableOpacity>
               <View style={styles.museumCardBody}>
                 <View>
                   <Text style={styles.museumTitle}>{item.title}</Text>
@@ -876,7 +1030,18 @@ export function MuseumDirectoryContent({
             </TouchableOpacity>
           ) : (
             <View key={item.id} style={styles.textOnlyResultItem}>
-              <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+              <View style={styles.textOnlyHeader}>
+                <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+                <TouchableOpacity
+                  style={styles.listNavBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    void handleMuseumNavigate(item);
+                  }}
+                >
+                  <Navigation size={13} color={Colors.primary} />
+                </TouchableOpacity>
+              </View>
               <View style={styles.locationRow}>
                 <MapPin size={12} color={Colors.textMuted} />
                 <Text style={styles.locationText}>{item.location}</Text>
@@ -907,6 +1072,7 @@ export function MuseumDirectoryContent({
           <Text style={styles.loadMoreHint}>{'\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u5185\u5bb9...'}</Text>
         </View>
       ) : null}
+      {fallbackModal}
     </View>
   );
 }
@@ -1210,19 +1376,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 190,
   },
-  distancePill: {
+  scenicNavIcon: {
     position: 'absolute',
     top: 150,
     right: 14,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-  },
-  distancePillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: stylesVars.scenicPrimary,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.backgroundAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardBody: {
     padding: 14,
@@ -1303,6 +1466,29 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 180,
     borderRadius: 18,
+  },
+  scenicFallbackWrap: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  scenicFallbackHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+  },
+  scenicFallbackTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  scenicFallbackCloseText: {
+    fontSize: 14,
+    color: Colors.accent,
+    fontWeight: '600',
   },
   editorialHeader: {
     marginBottom: 30,
@@ -1636,6 +1822,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.text,
     marginBottom: 6,
+  },
+  textOnlyHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  listNavBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.backgroundAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   textOnlyTagsRow: {
     flexDirection: 'row',

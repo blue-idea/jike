@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
-  TouchableOpacity, StatusBar, ImageBackground,
+  TouchableOpacity, StatusBar, ImageBackground, Modal, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
@@ -12,16 +12,26 @@ import {
   Plus, Route, Clock, MapPin, Sparkles,
   Navigation, Calendar, ChevronRight, Footprints,
 } from 'lucide-react-native';
+import {
+  formatRouteInfo,
+  navigateWithGaode,
+  optimizeRoute,
+  queryGaodeRoute,
+  type RouteMode,
+  type RoutePoint,
+  type RouteResult,
+} from '@/lib/route/routeService';
+import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
 
 const ACTIVE_JOURNEY = {
   title: '西安三日文化深度游',
   days: 3,
   currentDay: 1,
   stops: [
-    { id: '1', name: '秦始皇帝陵博物院', time: '09:00', duration: '3h', type: '陵墓遗址', done: true },
-    { id: '2', name: '陕西历史博物馆', time: '13:30', duration: '2.5h', type: '博物馆', done: true },
-    { id: '3', name: '大雁塔·大唐芙蓉园', time: '16:30', duration: '2h', type: '古建筑', done: false },
-    { id: '4', name: '西安城墙', time: '19:00', duration: '1.5h', type: '古建筑', done: false },
+    { id: '1', name: '秦始皇帝陵博物院', time: '09:00', duration: '3h', type: '陵墓遗址', done: true, lng: 109.2732, lat: 34.3846 },
+    { id: '2', name: '陕西历史博物馆', time: '13:30', duration: '2.5h', type: '博物馆', done: true, lng: 108.9542, lat: 34.2224 },
+    { id: '3', name: '大雁塔·大唐芙蓉园', time: '16:30', duration: '2h', type: '古建筑', done: false, lng: 108.9669, lat: 34.2189 },
+    { id: '4', name: '西安城墙', time: '19:00', duration: '1.5h', type: '古建筑', done: false, lng: 108.9398, lat: 34.2654 },
   ],
 };
 
@@ -32,8 +42,88 @@ const MODES = [
   { id: 'done', label: '已完成' },
 ];
 
+const ROUTE_MODES: { id: RouteMode; label: string }[] = [
+  { id: 'walk', label: '步行' },
+  { id: 'drive', label: '驾车' },
+  { id: 'bus', label: '公交' },
+];
+
 export default function JourneyScreen() {
   const [activeMode, setActiveMode] = useState('all');
+  const [routeMode, setRouteMode] = useState<RouteMode>('walk');
+  const [routePoints, setRoutePoints] = useState(ACTIVE_JOURNEY.stops);
+  const [routeResult, setRouteResult] = useState<RouteResult | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [fallbackVisible, setFallbackVisible] = useState(false);
+  const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
+
+  const toRoutePoints = (points = routePoints): RoutePoint[] =>
+    points.map((point) => ({
+      id: point.id,
+      name: point.name,
+      lng: point.lng,
+      lat: point.lat,
+    }));
+
+  const recalculateRoute = async (points = routePoints) => {
+    const candidates = toRoutePoints(points);
+    if (candidates.length < 2) {
+      setRouteError('至少需要两个点位才能规划路线');
+      setRouteResult(null);
+      return;
+    }
+
+    setRouteLoading(true);
+    setRouteError(null);
+    try {
+      let totalDistance = 0;
+      let totalDuration = 0;
+      const merged: RouteResult['segments'] = [];
+
+      for (let index = 0; index < candidates.length - 1; index += 1) {
+        const from = candidates[index];
+        const to = candidates[index + 1];
+        const segment = await queryGaodeRoute(
+          { lng: from.lng, lat: from.lat },
+          { lng: to.lng, lat: to.lat },
+          routeMode,
+        );
+        totalDistance += segment.total_distance;
+        totalDuration += segment.total_duration;
+        merged.push(...segment.segments);
+      }
+
+      setRouteResult({
+        route_id: `journey-${Date.now()}`,
+        total_distance: totalDistance,
+        total_duration: totalDuration,
+        segments: merged,
+      });
+    } catch (error) {
+      setRouteResult(null);
+      setRouteError(error instanceof Error ? error.message : '路线规划失败，请稍后重试');
+    } finally {
+      setRouteLoading(false);
+    }
+  };
+
+  const handleOptimize = async () => {
+    const optimized = optimizeRoute(toRoutePoints()).map((point) => {
+      const original = routePoints.find((item) => item.id === point.id);
+      return original ?? routePoints[0];
+    });
+    setRoutePoints(optimized);
+    await recalculateRoute(optimized);
+  };
+
+  const handleNavigate = async (point: RoutePoint) => {
+    const strategy = await navigateWithGaode(point, routeMode);
+    if (strategy === 'webview') {
+      setFallbackDestination(point);
+      setFallbackVisible(true);
+    }
+  };
 
   return (
     <View style={styles.root}>
@@ -62,20 +152,20 @@ export default function JourneyScreen() {
               </View>
               <View style={styles.metaItem}>
                 <Route size={13} color={Colors.textMuted} />
-                <Text style={styles.metaText}>{ACTIVE_JOURNEY.stops.length} 处打卡点</Text>
+                <Text style={styles.metaText}>{routePoints.length} 处打卡点</Text>
               </View>
             </View>
           </View>
 
           <View style={styles.timeline}>
-            {ACTIVE_JOURNEY.stops.map((stop, index) => (
+            {routePoints.map((stop, index) => (
               <View key={stop.id} style={styles.timelineItem}>
                 <View style={styles.timelineLeft}>
                   <View style={[
                     styles.timelineDot,
                     stop.done ? styles.timelineDotDone : styles.timelineDotPending,
                   ]} />
-                  {index < ACTIVE_JOURNEY.stops.length - 1 && (
+                  {index < routePoints.length - 1 && (
                     <View style={[
                       styles.timelineLine,
                       stop.done && styles.timelineLineDone,
@@ -94,7 +184,17 @@ export default function JourneyScreen() {
                         <Text style={[styles.typeText, { color: Colors.accent }]}>{stop.type}</Text>
                       </View>
                       {!stop.done && (
-                        <TouchableOpacity style={styles.navBtn}>
+                        <TouchableOpacity
+                          style={styles.navBtn}
+                          onPress={() => {
+                            void handleNavigate({
+                              id: stop.id,
+                              name: stop.name,
+                              lng: stop.lng,
+                              lat: stop.lat,
+                            });
+                          }}
+                        >
                           <Navigation size={14} color={Colors.primary} />
                         </TouchableOpacity>
                       )}
@@ -109,6 +209,62 @@ export default function JourneyScreen() {
               </View>
             ))}
           </View>
+
+          <View style={styles.routeActionRow}>
+            {ROUTE_MODES.map((mode) => (
+              <TouchableOpacity
+                key={mode.id}
+                style={[styles.routeModeBtn, routeMode === mode.id && styles.routeModeBtnActive]}
+                onPress={() => {
+                  setRouteMode(mode.id);
+                  void recalculateRoute();
+                }}
+              >
+                <Text style={[styles.routeModeBtnText, routeMode === mode.id && styles.routeModeBtnTextActive]}>
+                  {mode.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.routeActionRow}>
+            <TouchableOpacity
+              style={styles.routeCalcBtn}
+              onPress={() => {
+                void recalculateRoute();
+              }}
+            >
+              <Route size={14} color={Colors.primary} />
+              <Text style={styles.routeCalcBtnText}>重新算路</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.routeOptimizeBtn}
+              onPress={() => {
+                void handleOptimize();
+              }}
+            >
+              <Sparkles size={14} color={Colors.white} />
+              <Text style={styles.routeOptimizeBtnText}>多点优化</Text>
+            </TouchableOpacity>
+          </View>
+          {routeLoading && (
+            <View style={styles.routeSummaryBox}>
+              <ActivityIndicator color={Colors.primary} />
+              <Text style={styles.routeSummaryText}>正在规划路线...</Text>
+            </View>
+          )}
+          {!routeLoading && routeResult && (
+            <View style={styles.routeSummaryBox}>
+              <Text style={styles.routeSummaryTitle}>路线概览</Text>
+              <Text style={styles.routeSummaryText}>
+                总距离 {formatRouteInfo(routeResult).distance} · 预计耗时 {formatRouteInfo(routeResult).duration}
+              </Text>
+            </View>
+          )}
+          {!routeLoading && routeError && (
+            <View style={styles.routeSummaryBox}>
+              <Text style={styles.routeErrorText}>{routeError}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.modeFilterRow}>
@@ -205,6 +361,29 @@ export default function JourneyScreen() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      <Modal
+        visible={fallbackVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setFallbackVisible(false)}
+      >
+        <SafeAreaView style={styles.fallbackWrap}>
+          <View style={styles.fallbackHeader}>
+            <Text style={styles.fallbackTitle}>应用内导航降级</Text>
+            <TouchableOpacity onPress={() => setFallbackVisible(false)}>
+              <Text style={styles.fallbackCloseText}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+          {fallbackDestination ? (
+            <RouteWebViewFallback
+              origin={toRoutePoints()[0] ?? fallbackDestination}
+              destination={fallbackDestination}
+              mode={routeMode}
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -406,6 +585,109 @@ const styles = StyleSheet.create({
     color: Colors.jade,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  routeActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 10,
+  },
+  routeModeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: Colors.cardMuted,
+  },
+  routeModeBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  routeModeBtnText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  routeModeBtnTextActive: {
+    color: Colors.white,
+  },
+  routeCalcBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: Colors.primary + '14',
+  },
+  routeCalcBtnText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  routeOptimizeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingVertical: 10,
+    backgroundColor: Colors.accent,
+  },
+  routeOptimizeBtnText: {
+    fontSize: 12,
+    color: Colors.white,
+    fontWeight: '700',
+  },
+  routeSummaryBox: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.backgroundAlt,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 4,
+  },
+  routeSummaryTitle: {
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: '700',
+  },
+  routeSummaryText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+  routeErrorText: {
+    fontSize: 12,
+    color: '#B5352A',
+    lineHeight: 18,
+  },
+  fallbackWrap: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  fallbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.borderLight,
+  },
+  fallbackTitle: {
+    fontSize: 16,
+    color: Colors.text,
+    fontWeight: '700',
+  },
+  fallbackCloseText: {
+    fontSize: 13,
+    color: Colors.primary,
+    fontWeight: '700',
   },
   modeFilterRow: {
     flexDirection: 'row',
