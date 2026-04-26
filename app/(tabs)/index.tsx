@@ -6,7 +6,7 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { FEATURED_SITES, NEARBY_SITES } from '@/constants/MockData';
+import { FEATURED_SITES } from '@/constants/MockData';
 import { HeroCarousel } from '@/components/home/HeroCarousel';
 import { CategoryFilter } from '@/components/home/CategoryFilter';
 import { SiteCard } from '@/components/home/SiteCard';
@@ -20,12 +20,15 @@ import {
   normalizeCatalogLocation,
   useCatalogLocation,
 } from '@/contexts/CatalogLocationContext';
-import { Bell, MapPin, Sparkles, Mic } from 'lucide-react-native';
+import { MapPin, Sparkles, Mic } from 'lucide-react-native';
 import { BrandHeader } from '@/components/ui/BrandHeader';
+import { useNearbyPois } from '@/hooks/useNearbyPois';
 
 export default function HomeScreen() {
   const { setHomeCatalogLocation } = useCatalogLocation();
   const [location, setLocation] = useState('定位中...');
+  const { pois: nearbyPois, loading: nearbyLoading, error: nearbyError, refresh: refreshNearby } =
+    useNearbyPois({ radiusM: 10000 });
 
   const refreshHeaderLocation = useCallback(async () => {
     try {
@@ -61,6 +64,10 @@ export default function HomeScreen() {
   useEffect(() => {
     refreshHeaderLocation();
   }, [refreshHeaderLocation]);
+
+  useEffect(() => {
+    void refreshNearby();
+  }, [refreshNearby]);
 
   const handleCategorySelect = (id: string) => {
     if (id === 'heritage') {
@@ -166,23 +173,39 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <SectionHeader
             title="周边文旅点位"
-            subtitle="500米内的博物馆与文保单位"
-            onSeeAll={() => {}}
+            subtitle="定位授权用于文化地标推荐与距离计算（默认10km）"
+            onSeeAll={() => {
+              void refreshNearby();
+            }}
           />
-          {NEARBY_SITES.map((site) => (
-            <NearbyCard
-              key={site.id}
-              name={site.name}
-              type={site.type}
-              dynasty={site.dynasty}
-              distance={site.distance}
-              isOpen={site.isOpen}
-              image={site.image}
-              isFree={site.isFree}
-              onPress={() => {}}
-              onNavigate={() => {}}
-            />
-          ))}
+          {nearbyLoading ? (
+            <Text style={styles.nearbyStateText}>正在获取附近点位...</Text>
+          ) : nearbyError ? (
+            <Text style={styles.nearbyStateText}>{nearbyError}</Text>
+          ) : nearbyPois.length === 0 ? (
+            <Text style={styles.nearbyStateText}>附近暂无符合条件的文化地标</Text>
+          ) : (
+            nearbyPois.slice(0, 6).map((poi) => (
+              <NearbyCard
+                key={poi.id}
+                name={poi.name}
+                type={
+                  poi.poi_type === 'scenic'
+                    ? 'A级景区'
+                    : poi.poi_type === 'heritage'
+                      ? '重点文保'
+                      : '博物馆'
+                }
+                dynasty={poi.label ?? '文化地标'}
+                distance={poi.distance_display ?? '距离未知'}
+                isOpen
+                image={poi.images?.[0] || FEATURED_SITES[0].image}
+                isFree={poi.poi_type === 'museum'}
+                onPress={() => {}}
+                onNavigate={() => {}}
+              />
+            ))
+          )}
         </View>
 
         <View style={styles.section}>
@@ -327,5 +350,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.accent,
     fontWeight: '700',
+  },
+  nearbyStateText: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
   },
 });

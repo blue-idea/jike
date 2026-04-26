@@ -5,7 +5,7 @@
  * EARS-1：获取位置后查询附近 POI，结果集与筛选条件一致
  * EARS-2：按 distance 升序排列，标注距离单位
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   getCurrentLocationWithPermission,
   type LocationCoords,
@@ -37,7 +37,7 @@ export interface UseNearbyPoisReturn {
 export function useNearbyPois(
   options: UseNearbyPoisOptions = {},
 ): UseNearbyPoisReturn {
-  const { radiusM = 5000, autoLoad = false } = options;
+  const { radiusM = 10000, autoLoad = false } = options;
   const [pois, setPois] = useState<NearbyPoi[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +78,12 @@ export function useNearbyPois(
   const refresh = useCallback(async () => {
     await loadNearby();
   }, [loadNearby]);
+
+  useEffect(() => {
+    if (autoLoad) {
+      void loadNearby();
+    }
+  }, [autoLoad, loadNearby]);
 
   return { pois, loading, error, locationStatus, locationCoords, loadNearby, refresh };
 }

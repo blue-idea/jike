@@ -5,15 +5,8 @@
  * EARS-1 覆盖：定位后查询附近 POI
  * EARS-2 覆盖：按距离排序
  */
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { calcDistance, formatDistance, type LocationCoords } from './locationService';
-
-function getSupabaseClient() {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('缺少 Supabase 环境变量');
-  return createClient(url, key);
-}
 
 export type PoiType = 'scenic' | 'heritage' | 'museum';
 
@@ -52,10 +45,13 @@ function sortByDistance<T extends NearbyPoi>(items: T[], center: LocationCoords)
       distance_m: calcDistance(center.lat, center.lng, item.lat, item.lng),
     }))
     .sort((a, b) => {
-      // 优先 rec_prio (recommend 非空优先)，再按距离
+      // 排序链：recommend 非空优先 -> sort 升序 -> 距离升序
       const recA = a.rec_prio ?? 1;
       const recB = b.rec_prio ?? 1;
       if (recA !== recB) return recA - recB;
+      const sortA = Number.isFinite(a.sort) ? (a.sort as number) : Number.MAX_SAFE_INTEGER;
+      const sortB = Number.isFinite(b.sort) ? (b.sort as number) : Number.MAX_SAFE_INTEGER;
+      if (sortA !== sortB) return sortA - sortB;
       return (a.distance_m ?? 0) - (b.distance_m ?? 0);
     })
     .map((item) => ({
@@ -72,8 +68,6 @@ export async function queryNearbyPois(
   options: NearbyQueryOptions,
 ): Promise<NearbyPoi[]> {
   const { center, radiusM = 5000, poiType, limit = 50 } = options;
-  const supabase = getSupabaseClient();
-
   let query = supabase
     .from('catalog_poi_nearby')
     .select('id,name,poi_type,lng,lat,label,province,recommend,sort,images')
@@ -119,8 +113,6 @@ export async function queryNearbyPoisRPC(
   options: { radiusM?: number; poiType?: PoiType; limit?: number } = {},
 ): Promise<NearbyPoi[]> {
   const { radiusM = 5000, poiType, limit = 50 } = options;
-  const supabase = getSupabaseClient();
-
   const { data, error } = await supabase.rpc('nearby_pois', {
     ref_lng: center.lng,
     ref_lat: center.lat,
@@ -149,11 +141,14 @@ export async function queryNearbyPoisRPC(
     results = results.filter((r) => r.poi_type === poiType);
   }
 
-  // 按 recommend 优先级 → 距离 排序（服务端未返回 rec_prio 时）
+  // 排序链：recommend 非空优先 -> sort 升序 -> 距离升序
   results.sort((a, b) => {
     const recA = a.recommend && a.recommend.trim() !== '' ? 0 : 1;
     const recB = b.recommend && b.recommend.trim() !== '' ? 0 : 1;
     if (recA !== recB) return recA - recB;
+    const sortA = Number.isFinite(a.sort) ? (a.sort as number) : Number.MAX_SAFE_INTEGER;
+    const sortB = Number.isFinite(b.sort) ? (b.sort as number) : Number.MAX_SAFE_INTEGER;
+    if (sortA !== sortB) return sortA - sortB;
     return (a.distance_m ?? 0) - (b.distance_m ?? 0);
   });
 
