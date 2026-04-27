@@ -14,4 +14,16 @@ module.exports = defineConfig([
       globals: globals.node,
     },
   },
+  {
+    files: ["supabase/functions/**/*.ts"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        Deno: "readonly",
+      },
+    },
+    rules: {
+      "import/no-unresolved": "off",
+    },
+  },
 ]);
