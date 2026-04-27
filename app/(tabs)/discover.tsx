@@ -8,7 +8,7 @@ import { Colors } from '@/constants/Colors';
 import { SearchBar } from '@/components/discover/SearchBar';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useCatalogLocation } from '@/contexts/CatalogLocationContext';
-import { Landmark, Search, Map, MapPin } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 import { HeritageDirectoryContent, ScenicSearchContent, MuseumDirectoryContent } from '@/components/catalog/CatalogScreens';
 
 export default function DiscoverScreen() {
@@ -84,24 +84,29 @@ export default function DiscoverScreen() {
         </View>
 
         <View style={styles.tabBarContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBarScroll}>
+          <View style={styles.segmentedControl}>
             {[
-              { id: 'scenic', label: 'A级景区', icon: Map },
-              { id: 'museum', label: '博物馆', icon: Search },
-              { id: 'heritage', label: '重点文保', icon: Landmark },
+              { id: 'scenic', label: 'A级景区' },
+              { id: 'museum', label: '博物馆' },
+              { id: 'heritage', label: '重点文保' },
             ].map((tab) => (
               <TouchableOpacity
                 key={tab.id}
-                style={[styles.mainTab, activeTab === tab.id && styles.mainTabActive]}
+                style={[
+                  styles.segmentedTab,
+                  activeTab === tab.id && styles.segmentedTabActive
+                ]}
                 onPress={() => setActiveTab(tab.id as any)}
               >
-                <tab.icon size={16} color={activeTab === tab.id ? Colors.white : Colors.primary} />
-                <Text style={[styles.mainTabText, activeTab === tab.id && styles.mainTabTextActive]}>
+                <Text style={[
+                  styles.segmentedTabText,
+                  activeTab === tab.id && styles.segmentedTabTextActive
+                ]}>
                   {tab.label}
                 </Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
         </View>
 
         <View style={styles.contentContainer}>
@@ -164,33 +169,43 @@ const styles = StyleSheet.create({
   tabBarContainer: {
     backgroundColor: Colors.background,
     paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  tabBarScroll: {
-    gap: 12,
-  },
-  mainTab: {
-    flexDirection: 'row',
+    paddingBottom: 16,
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
   },
-  mainTabActive: {
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: '#EDE5D8',
+    borderRadius: 32,
+    padding: 4,
+    width: '100%',
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentedTab: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 28,
+  },
+  segmentedTabActive: {
     backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
+    // Add subtle shadow for active tab to make it pop like in the image
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  mainTabText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textSecondary,
+  segmentedTabText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#5C5040',
   },
-  mainTabTextActive: {
+  segmentedTabTextActive: {
     color: Colors.white,
+    fontWeight: '700',
   },
   contentContainer: {
     flex: 1,

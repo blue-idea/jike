@@ -12,7 +12,6 @@ import {
   ChevronDown,
   LocateFixed,
   MapPinned,
-  RefreshCw,
 } from 'lucide-react-native';
 import { CHINA_REGIONS } from '@/constants/CatalogData';
 import { Colors } from '@/constants/Colors';
@@ -288,22 +287,7 @@ export function GeoLocationFilter({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.locationCurrentDisplay}>
-          <Text style={styles.locationDisplayText}>
-            {useAutoLocation ? '📍 当前位置' : '🔍 手动筛选'}:{' '}
-            <Text style={[styles.locationEmphasis, { color: primaryColor }]}>
-              {location.province} · {location.city} · {location.district}
-            </Text>
-          </Text>
-          {useAutoLocation && (
-            <TouchableOpacity
-              onPress={handleRelocate}
-              style={styles.refreshIconWrap}
-            >
-              <RefreshCw size={12} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
+
         {locationError ? (
           <Text style={styles.locationErrorText}>{locationError}</Text>
         ) : null}
@@ -777,22 +761,7 @@ export function MuseumFilterPanel({
         </View>
 
         {/* Current Location Display */}
-        <View style={styles.locationCurrentDisplay}>
-          <Text style={styles.locationDisplayText}>
-            {useAutoLocation ? '📍 当前位置' : '🔍 手动筛选'}:{' '}
-            <Text style={[styles.locationEmphasis, { color: primaryColor }]}>
-              {location.province} · {location.city} · {location.district}
-            </Text>
-          </Text>
-          {useAutoLocation && (
-            <TouchableOpacity
-              onPress={handleRelocate}
-              style={styles.refreshIconWrap}
-            >
-              <RefreshCw size={12} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
+
         {locationError ? (
           <Text style={styles.locationErrorText}>{locationError}</Text>
         ) : null}
@@ -1112,22 +1081,6 @@ export function HeritageFilterPanel({
           </TouchableOpacity>
         </View>
 
-        <View style={styles.locationCurrentDisplay}>
-          <Text style={styles.locationDisplayText}>
-            {useAutoLocation ? '📍 当前位置' : '🗺️ 手动筛选'}：{' '}
-            <Text style={[styles.locationEmphasis, { color: primaryColor }]}>
-              {location.province} · {location.city} · {location.district}
-            </Text>
-          </Text>
-          {useAutoLocation && (
-            <TouchableOpacity
-              onPress={handleRelocate}
-              style={styles.refreshIconWrap}
-            >
-              <RefreshCw size={12} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
         {locationError ? (
           <Text style={styles.locationErrorText}>{locationError}</Text>
         ) : null}

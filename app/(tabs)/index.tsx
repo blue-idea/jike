@@ -109,7 +109,7 @@ export default function HomeScreen() {
         setFallbackVisible(true);
       }
     },
-    [nearbyPois],
+    [],
   );
 
   return (
@@ -212,7 +212,7 @@ export default function HomeScreen() {
           ) : nearbyPois.length === 0 ? (
             <Text style={styles.nearbyStateText}>附近暂无符合条件的文化地标</Text>
           ) : (
-            nearbyPois.slice(0, 6).map((poi) => (
+            nearbyPois.slice(0, 5).map((poi) => (
               <NearbyCard
                 key={poi.id}
                 name={poi.name}
