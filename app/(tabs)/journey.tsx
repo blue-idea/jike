@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, StyleSheet, SafeAreaView,
   TouchableOpacity, StatusBar, ImageBackground, Modal, ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { JOURNEY_TEMPLATES } from '@/constants/MockData';
@@ -11,7 +10,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import {
   Plus, Route, Clock, MapPin, Sparkles,
-  Navigation, Calendar, ChevronRight, Footprints, Flame,
+  Navigation, Calendar, ChevronRight, Footprints,
 } from 'lucide-react-native';
 import {
   formatRouteInfo,
@@ -286,22 +285,6 @@ export default function JourneyScreen() {
           )}
         </View>
 
-        <View style={styles.heatTrendSection}>
-          <TouchableOpacity
-            style={styles.heatTrendCard}
-            onPress={() => router.push('/heatmap-trends')}
-            activeOpacity={0.88}
-          >
-            <View style={styles.heatTrendIconWrap}>
-              <Flame size={18} color={Colors.accent} />
-            </View>
-            <View style={styles.heatTrendTextWrap}>
-              <Text style={styles.heatTrendTitle}>热力与人流趋势</Text>
-              <Text style={styles.heatTrendDesc}>独立查看热门程度和实时路况图层</Text>
-            </View>
-            <ChevronRight size={18} color={Colors.textMuted} />
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.modeFilterRow}>
           {MODES.map((mode) => (
@@ -730,42 +713,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     gap: 8,
     marginBottom: 16,
-  },
-  heatTrendSection: {
-    marginHorizontal: 20,
-    marginBottom: 14,
-  },
-  heatTrendCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.card,
-  },
-  heatTrendIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.accent + '18',
-  },
-  heatTrendTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  heatTrendTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.text,
-  },
-  heatTrendDesc: {
-    fontSize: 12,
-    color: Colors.textMuted,
   },
   modeBtn: {
     paddingHorizontal: 14,

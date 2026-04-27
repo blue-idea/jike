@@ -10,6 +10,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { Heart, Bookmark, Map, Trash2, FolderOpen } from 'lucide-react-native';
 import { CollectionMapSection } from '@/components/collection/CollectionMapSection';
+import { HeatTrendEntryCard } from '@/components/heatmap/HeatTrendEntryCard';
 
 const TABS = [
   { id: 'favorites', label: '收藏', Icon: Heart },
@@ -51,6 +52,7 @@ export default function CollectionScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         <CollectionMapSection onMapInteractingChange={setIsMapInteracting} />
+        <HeatTrendEntryCard />
         <View style={styles.tabContainer}>
           <View style={styles.tabBar}>
             {TABS.map(({ id, label, Icon }) => (
