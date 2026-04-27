@@ -91,14 +91,20 @@ function TopBar({ title }: { title: string }) {
 interface ScenicSearchContentProps {
   keyword?: string;
   loadMoreSignal?: number;
+  externalFilters?: ScenicLocationFormState;
+  onApplyQuery?: (filters: ScenicLocationFormState) => void;
 }
 
 interface HeritageDirectoryContentProps {
   loadMoreSignal?: number;
+  externalFilters?: HeritageQueryFormState;
+  onApplyQuery?: (filters: HeritageQueryFormState) => void;
 }
 
 interface MuseumDirectoryContentProps {
   loadMoreSignal?: number;
+  externalFilters?: MuseumQueryFormState;
+  onApplyQuery?: (filters: MuseumQueryFormState) => void;
 }
 
 const PAGE_SIZE = 5;
@@ -174,18 +180,18 @@ function useCatalogNavigationFallback() {
     const currentLocation = await getCurrentLocationWithPermission();
     const origin: RoutePoint = currentLocation.coords
       ? {
-          id: 'current-location',
-          name: '我的位置',
-          lng: currentLocation.coords.lng,
-          lat: currentLocation.coords.lat,
-        }
+        id: 'current-location',
+        name: '我的位置',
+        lng: currentLocation.coords.lng,
+        lat: currentLocation.coords.lat,
+      }
       : {
-          // 定位失败时兜底为目的地附近点，确保可展示降级导航页
-          id: `${destination.id}-origin`,
-          name: '附近位置',
-          lng: destination.lng - 0.0005,
-          lat: destination.lat - 0.0005,
-        };
+        // 定位失败时兜底为目的地附近点，确保可展示降级导航页
+        id: `${destination.id}-origin`,
+        name: '附近位置',
+        lng: destination.lng - 0.0005,
+        lat: destination.lat - 0.0005,
+      };
     setFallbackDestination(destination);
     setFallbackOrigin(origin);
     setFallbackVisible(true);
@@ -219,7 +225,12 @@ function useCatalogNavigationFallback() {
   return { openFallbackForDestination, fallbackModal };
 }
 
-export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSignal = 0 }: ScenicSearchContentProps) {
+export function ScenicSearchContent({
+  keyword = '',
+  loadMoreSignal: _loadMoreSignal = 0,
+  externalFilters,
+  onApplyQuery: externalOnApplyQuery,
+}: ScenicSearchContentProps) {
   const { homeCatalogLocation } = useCatalogLocation();
   const scenicFilterLocation = useMemo(
     () => buildScenicFilterLocation(homeCatalogLocation),
@@ -298,10 +309,20 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
 
   const onApplyScenicQuery = useCallback((f: ScenicLocationFormState) => {
     const normalized = normalizeScenicFilters(f);
-    setActiveScenicFilters(normalized);
+    if (externalOnApplyQuery) {
+      externalOnApplyQuery(normalized);
+    } else {
+      setActiveScenicFilters(normalized);
+    }
     setScenicPage(1);
     setHasMoreScenic(true);
-  }, [normalizeScenicFilters]);
+  }, [normalizeScenicFilters, externalOnApplyQuery]);
+
+  useEffect(() => {
+    if (externalFilters) {
+      setActiveScenicFilters(externalFilters);
+    }
+  }, [externalFilters]);
 
   useEffect(() => {
     setActiveScenicFilters(initialScenicFilters);
@@ -349,15 +370,17 @@ export function ScenicSearchContent({ keyword = '', loadMoreSignal: _loadMoreSig
 
   return (
     <>
-      <View style={styles.sectionPad}>
-        <GeoLocationFilter
-          key={`scenic-filter-${scenicFilterLocation.province}-${scenicFilterLocation.city}-${scenicFilterLocation.district}`}
-          primaryColor={stylesVars.scenicPrimary}
-          defaultLocation={scenicFilterLocation}
-          showDistrictFilter={false}
-          onApplyQuery={onApplyScenicQuery}
-        />
-      </View>
+      {!externalFilters && (
+        <View style={styles.sectionPad}>
+          <GeoLocationFilter
+            key={`scenic-filter-${scenicFilterLocation.province}-${scenicFilterLocation.city}-${scenicFilterLocation.district}`}
+            primaryColor={stylesVars.scenicPrimary}
+            defaultLocation={scenicFilterLocation}
+            showDistrictFilter={false}
+            onApplyQuery={onApplyScenicQuery}
+          />
+        </View>
+      )}
 
       <View style={styles.sectionPad}>
         <View style={styles.sectionHeading}>
@@ -546,6 +569,8 @@ export function ScenicSearchScreen() {
 
 export function HeritageDirectoryContent({
   loadMoreSignal = 0,
+  externalFilters,
+  onApplyQuery: externalOnApplyQuery,
 }: HeritageDirectoryContentProps = {}) {
   const { homeCatalogLocation } = useCatalogLocation();
   const heritageFilterLocation = useMemo(
@@ -645,13 +670,23 @@ export function HeritageDirectoryContent({
 
   const onApplyHeritageQuery = useCallback(
     (f: HeritageQueryFormState) => {
-      setActiveHeritageFilters(f);
+      if (externalOnApplyQuery) {
+        externalOnApplyQuery(f);
+      } else {
+        setActiveHeritageFilters(f);
+      }
       setHeritagePage(1);
       setHasMoreHeritage(true);
       loadHeritageData(f, 1, false);
     },
-    [loadHeritageData],
+    [loadHeritageData, externalOnApplyQuery],
   );
+
+  useEffect(() => {
+    if (externalFilters) {
+      setActiveHeritageFilters(externalFilters);
+    }
+  }, [externalFilters]);
 
   useEffect(() => {
     loadHeritageFilterOptions();
@@ -661,8 +696,13 @@ export function HeritageDirectoryContent({
     setActiveHeritageFilters(initialHeritageFilters);
     setHeritagePage(1);
     setHasMoreHeritage(true);
-    loadHeritageData(initialHeritageFilters, 1, false);
-  }, [initialHeritageFilters, loadHeritageData]);
+  }, [initialHeritageFilters]);
+
+  useEffect(() => {
+    setHeritagePage(1);
+    setHasMoreHeritage(true);
+    loadHeritageData(activeHeritageFilters, 1, false);
+  }, [activeHeritageFilters, loadHeritageData]);
 
   useEffect(() => {
     if (loadMoreSignal <= 0) return;
@@ -694,13 +734,15 @@ export function HeritageDirectoryContent({
 
   return (
     <View style={styles.sectionPad}>
-      <HeritageFilterPanel
-        key={`heritage-filter-${heritageFilterLocation.province}-${heritageFilterLocation.city}-${heritageFilterLocation.district}`}
-        primaryColor={stylesVars.heritagePrimary}
-        defaultLocation={heritageFilterLocation}
-        filterOptions={filterOptions}
-        onApplyQuery={onApplyHeritageQuery}
-      />
+      {!externalFilters && (
+        <HeritageFilterPanel
+          key={`heritage-filter-${heritageFilterLocation.province}-${heritageFilterLocation.city}-${heritageFilterLocation.district}`}
+          primaryColor={stylesVars.heritagePrimary}
+          defaultLocation={heritageFilterLocation}
+          filterOptions={filterOptions}
+          onApplyQuery={onApplyHeritageQuery}
+        />
+      )}
 
       {heritageHint ? (
         <Text style={styles.filterResultHint}>{heritageHint}</Text>
@@ -836,6 +878,8 @@ export function HeritageDirectoryScreen() {
 
 export function MuseumDirectoryContent({
   loadMoreSignal = 0,
+  externalFilters,
+  onApplyQuery: externalOnApplyQuery,
 }: MuseumDirectoryContentProps = {}) {
   const { homeCatalogLocation } = useCatalogLocation();
   const museumFilterLocation = useMemo(
@@ -911,20 +955,35 @@ export function MuseumDirectoryContent({
 
   const onApplyMuseumQuery = useCallback(
     (f: MuseumQueryFormState) => {
-      setActiveMuseumFilters(f);
+      if (externalOnApplyQuery) {
+        externalOnApplyQuery(f);
+      } else {
+        setActiveMuseumFilters(f);
+      }
       setMuseumPage(1);
       setHasMoreMuseum(true);
       loadMuseumData(f, 1, false);
     },
-    [loadMuseumData],
+    [loadMuseumData, externalOnApplyQuery],
   );
+
+  useEffect(() => {
+    if (externalFilters) {
+      setActiveMuseumFilters(externalFilters);
+    }
+  }, [externalFilters]);
 
   useEffect(() => {
     setActiveMuseumFilters(initialMuseumFilters);
     setMuseumPage(1);
     setHasMoreMuseum(true);
-    loadMuseumData(initialMuseumFilters, 1, false);
-  }, [initialMuseumFilters, loadMuseumData]);
+  }, [initialMuseumFilters]);
+
+  useEffect(() => {
+    setMuseumPage(1);
+    setHasMoreMuseum(true);
+    loadMuseumData(activeMuseumFilters, 1, false);
+  }, [activeMuseumFilters, loadMuseumData]);
 
   useEffect(() => {
     if (loadMoreSignal <= 0) return;
@@ -956,12 +1015,14 @@ export function MuseumDirectoryContent({
 
   return (
     <View style={styles.sectionPad}>
-      <MuseumFilterPanel
-        key={`museum-filter-${museumFilterLocation.province}-${museumFilterLocation.city}-${museumFilterLocation.district}`}
-        primaryColor={stylesVars.heritagePrimary}
-        defaultLocation={museumFilterLocation}
-        onApplyQuery={onApplyMuseumQuery}
-      />
+      {!externalFilters && (
+        <MuseumFilterPanel
+          key={`museum-filter-${museumFilterLocation.province}-${museumFilterLocation.city}-${museumFilterLocation.district}`}
+          primaryColor={stylesVars.heritagePrimary}
+          defaultLocation={museumFilterLocation}
+          onApplyQuery={onApplyMuseumQuery}
+        />
+      )}
 
       {museumHint ? (
         <Text style={styles.filterResultHint}>{museumHint}</Text>
@@ -1098,8 +1159,8 @@ export function MuseumDirectoryScreen() {
 
 const stylesVars = {
   heritageBg: Colors.background,
-  heritagePrimary: '#0E4753',
-  scenicPrimary: '#0E4753',
+  heritagePrimary: Colors.primary,
+  scenicPrimary: Colors.primary,
 };
 const SCENIC_FALLBACK_IMAGE = require('../../assets/images/pexels-photo-3280117.jpeg');
 

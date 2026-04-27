@@ -7,9 +7,17 @@ interface SearchBarProps {
   placeholder?: string;
   onSearch?: (text: string) => void;
   onFilter?: () => void;
+  containerStyle?: any;
+  hideFilterBtn?: boolean;
 }
 
-export function SearchBar({ placeholder = '搜索景点、博物馆、文物...', onSearch, onFilter }: SearchBarProps) {
+export function SearchBar({
+  placeholder = '搜索景点、博物馆、文物...',
+  onSearch,
+  onFilter,
+  containerStyle,
+  hideFilterBtn = false,
+}: SearchBarProps) {
   const [value, setValue] = useState('');
 
   const handleChange = (text: string) => {
@@ -23,7 +31,7 @@ export function SearchBar({ placeholder = '搜索景点、博物馆、文物...'
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       <View style={styles.inputWrapper}>
         <Search size={16} color={Colors.textMuted} />
         <TextInput
@@ -39,9 +47,11 @@ export function SearchBar({ placeholder = '搜索景点、博物馆、文物...'
           </TouchableOpacity>
         )}
       </View>
-      <TouchableOpacity style={styles.filterBtn} onPress={onFilter}>
-        <SlidersHorizontal size={18} color={Colors.primary} />
-      </TouchableOpacity>
+      {!hideFilterBtn && (
+        <TouchableOpacity style={styles.filterBtn} onPress={onFilter}>
+          <SlidersHorizontal size={18} color={Colors.primary} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -50,7 +60,6 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     gap: 10,
-    paddingHorizontal: 20,
     alignItems: 'center',
   },
   inputWrapper: {
