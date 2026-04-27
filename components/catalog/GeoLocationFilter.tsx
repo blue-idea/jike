@@ -257,43 +257,44 @@ export function GeoLocationFilter({
         styles.locationFilterPanel,
         transparent && styles.transparentPanel
       ]}>
-        {!transparent && (
-          <View style={styles.locationHeaderRow}>
+        <View style={styles.locationHeaderRow}>
+          {!transparent ? (
             <View style={styles.locationTitleGroup}>
               <MapPinned size={18} color={primaryColor} />
               <Text style={[styles.locationMainTitle, { color: primaryColor }]}>
                 地理位置筛选
               </Text>
             </View>
-            <TouchableOpacity
+          ) : (
+            <View />
+          )}
+          <TouchableOpacity
+            style={[
+              styles.autoLocateBtn,
+              useAutoLocation && { backgroundColor: primaryColor },
+            ]}
+            onPress={handleRelocate}
+            disabled={isLocating}
+          >
+            {isLocating ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <LocateFixed
+                size={14}
+                color={useAutoLocation ? Colors.white : primaryColor}
+              />
+            )}
+            <Text
               style={[
-                styles.autoLocateBtn,
-                useAutoLocation && { backgroundColor: primaryColor },
+                styles.autoLocateText,
+                { color: primaryColor },
+                useAutoLocation && styles.autoLocateTextActive,
               ]}
-              onPress={handleRelocate}
-              disabled={isLocating}
             >
-              {isLocating ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <LocateFixed
-                  size={14}
-                  color={useAutoLocation ? Colors.white : primaryColor}
-                />
-              )}
-              <Text
-                style={[
-                  styles.autoLocateText,
-                  { color: primaryColor },
-                  useAutoLocation && styles.autoLocateTextActive,
-                ]}
-              >
-                {isLocating ? '定位中...' : '当前定位'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
+              {isLocating ? '定位中...' : '当前定位'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {locationError ? (
           <Text style={styles.locationErrorText}>{locationError}</Text>
@@ -742,42 +743,44 @@ export function MuseumFilterPanel({
         museumStyles.filterPanel,
         transparent && styles.transparentPanel
       ]}>
-        {!transparent && (
-          <View style={styles.locationHeaderRow}>
+        <View style={styles.locationHeaderRow}>
+          {!transparent ? (
             <View style={styles.locationTitleGroup}>
               <MapPinned size={18} color={primaryColor} />
               <Text style={[styles.locationMainTitle, { color: primaryColor }]}>
                 博物馆筛选
               </Text>
             </View>
-            <TouchableOpacity
+          ) : (
+            <View />
+          )}
+          <TouchableOpacity
+            style={[
+              styles.autoLocateBtn,
+              useAutoLocation && { backgroundColor: primaryColor },
+            ]}
+            onPress={handleRelocate}
+            disabled={isLocating}
+          >
+            {isLocating ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <LocateFixed
+                size={14}
+                color={useAutoLocation ? Colors.white : primaryColor}
+              />
+            )}
+            <Text
               style={[
-                styles.autoLocateBtn,
-                useAutoLocation && { backgroundColor: primaryColor },
+                styles.autoLocateText,
+                { color: primaryColor },
+                useAutoLocation && styles.autoLocateTextActive,
               ]}
-              onPress={handleRelocate}
-              disabled={isLocating}
             >
-              {isLocating ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <LocateFixed
-                  size={14}
-                  color={useAutoLocation ? Colors.white : primaryColor}
-                />
-              )}
-              <Text
-                style={[
-                  styles.autoLocateText,
-                  { color: primaryColor },
-                  useAutoLocation && styles.autoLocateTextActive,
-                ]}
-              >
-                {isLocating ? '定位中...' : '当前定位'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              {isLocating ? '定位中...' : '当前定位'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Current Location Display */}
 
@@ -1070,42 +1073,44 @@ export function HeritageFilterPanel({
         museumStyles.filterPanel,
         transparent && styles.transparentPanel
       ]}>
-        {!transparent && (
-          <View style={styles.locationHeaderRow}>
+        <View style={styles.locationHeaderRow}>
+          {!transparent ? (
             <View style={styles.locationTitleGroup}>
               <MapPinned size={18} color={primaryColor} />
               <Text style={[styles.locationMainTitle, { color: primaryColor }]}>
                 重点文保筛选
               </Text>
             </View>
-            <TouchableOpacity
+          ) : (
+            <View />
+          )}
+          <TouchableOpacity
+            style={[
+              styles.autoLocateBtn,
+              useAutoLocation && { backgroundColor: primaryColor },
+            ]}
+            onPress={handleRelocate}
+            disabled={isLocating}
+          >
+            {isLocating ? (
+              <ActivityIndicator size="small" color={Colors.white} />
+            ) : (
+              <LocateFixed
+                size={14}
+                color={useAutoLocation ? Colors.white : primaryColor}
+              />
+            )}
+            <Text
               style={[
-                styles.autoLocateBtn,
-                useAutoLocation && { backgroundColor: primaryColor },
+                styles.autoLocateText,
+                { color: primaryColor },
+                useAutoLocation && styles.autoLocateTextActive,
               ]}
-              onPress={handleRelocate}
-              disabled={isLocating}
             >
-              {isLocating ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <LocateFixed
-                  size={14}
-                  color={useAutoLocation ? Colors.white : primaryColor}
-                />
-              )}
-              <Text
-                style={[
-                  styles.autoLocateText,
-                  { color: primaryColor },
-                  useAutoLocation && styles.autoLocateTextActive,
-                ]}
-              >
-                {isLocating ? '定位中...' : '当前位置'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              {isLocating ? '定位中...' : '当前位置'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {locationError ? (
           <Text style={styles.locationErrorText}>{locationError}</Text>
