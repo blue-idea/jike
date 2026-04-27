@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { MapPin, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { MapPin, Navigation, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface SiteCardProps {
   name: string;
@@ -17,6 +17,7 @@ interface SiteCardProps {
   isStamped?: boolean;
   level?: string;
   onPress?: () => void;
+  onNavigate?: () => void;
 }
 
 export function SiteCard({
@@ -32,6 +33,7 @@ export function SiteCard({
   isStamped,
   level,
   onPress,
+  onNavigate,
 }: SiteCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
@@ -79,6 +81,11 @@ export function SiteCard({
               </View>
             ))}
           </View>
+          {onNavigate ? (
+            <TouchableOpacity style={styles.navBtn} onPress={onNavigate} activeOpacity={0.85}>
+              <Navigation size={12} color={Colors.primary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
         {distance && <Text style={styles.distance}>{distance}</Text>}
       </View>
@@ -189,6 +196,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 4,
     flex: 1,
+    marginRight: 6,
   },
   tag: {
     backgroundColor: Colors.backgroundAlt,
@@ -206,5 +214,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.accent,
     fontWeight: '500',
+  },
+  navBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.backgroundAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

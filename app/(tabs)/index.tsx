@@ -17,6 +17,10 @@ import {
   reverseGeocodeLocation,
 } from '@/lib/location/locationService';
 import {
+  queryAmapNearbyScenic,
+  type AmapNearbyScenicItem,
+} from '@/lib/location/amapNearbyScenic';
+import {
   normalizeCatalogLocation,
   useCatalogLocation,
 } from '@/contexts/CatalogLocationContext';
@@ -29,6 +33,9 @@ import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
 export default function HomeScreen() {
   const { setHomeCatalogLocation } = useCatalogLocation();
   const [location, setLocation] = useState('定位中...');
+  const [featuredScenic, setFeaturedScenic] = useState<AmapNearbyScenicItem[]>([]);
+  const [featuredScenicLoading, setFeaturedScenicLoading] = useState(false);
+  const [featuredScenicError, setFeaturedScenicError] = useState<string | null>(null);
   const [fallbackVisible, setFallbackVisible] = useState(false);
   const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
   const {
@@ -71,9 +78,55 @@ export default function HomeScreen() {
     }
   }, [setHomeCatalogLocation]);
 
+  const refreshFeaturedScenic = useCallback(async () => {
+    setFeaturedScenicLoading(true);
+    setFeaturedScenicError(null);
+    try {
+      const current = await getCurrentLocationWithPermission();
+      if (!current.coords) {
+        const message =
+          current.status === 'denied' || current.status === 'blocked'
+            ? '未开启定位，已展示默认推荐'
+            : current.error ?? '定位失败，已展示默认推荐';
+        setFeaturedScenic([]);
+        setFeaturedScenicError(message);
+        return;
+      }
+
+      const address = await reverseGeocodeLocation(current.coords);
+      const city = address?.city?.trim() || address?.province?.trim() || '';
+      if (!city) {
+        setFeaturedScenic([]);
+        setFeaturedScenicError('无法识别当前城市，已展示默认推荐');
+        return;
+      }
+
+      const scenic = await queryAmapNearbyScenic({
+        center: current.coords,
+        city,
+        radiusM: 10000,
+        limit: 5,
+      });
+      setFeaturedScenic(scenic);
+      if (scenic.length === 0) {
+        setFeaturedScenicError('附近暂无景点，已展示默认推荐');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '获取精选景点失败';
+      setFeaturedScenic([]);
+      setFeaturedScenicError(`${message}，已展示默认推荐`);
+    } finally {
+      setFeaturedScenicLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     refreshHeaderLocation();
   }, [refreshHeaderLocation]);
+
+  useEffect(() => {
+    void refreshFeaturedScenic();
+  }, [refreshFeaturedScenic]);
 
   useEffect(() => {
     void refreshNearby();
@@ -102,6 +155,24 @@ export default function HomeScreen() {
         name: poi.name,
         lng: poi.lng,
         lat: poi.lat,
+      };
+      const strategy = await navigateWithGaode(destination, 'walk');
+      if (strategy === 'webview') {
+        setFallbackDestination(destination);
+        setFallbackVisible(true);
+      }
+    },
+    [],
+  );
+
+  const handleNavigateFeaturedSite = useCallback(
+    async (site: (typeof featuredScenic)[number] | (typeof FEATURED_SITES)[number]) => {
+      if (!('lng' in site) || !('lat' in site)) return;
+      const destination: RoutePoint = {
+        id: site.id,
+        name: site.name,
+        lng: site.lng,
+        lat: site.lat,
       };
       const strategy = await navigateWithGaode(destination, 'walk');
       if (strategy === 'webview') {
@@ -168,30 +239,45 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <SectionHeader
-            title="精选文化地标"
-            subtitle="为你推荐的文化遗产与博物馆"
-            onSeeAll={() => {}}
+            title="精选景点地标"
+            subtitle="基于当前定位城市的全市扫街榜必去景点 Top5"
+            onSeeAll={() => {
+              void refreshFeaturedScenic();
+            }}
           />
+          {featuredScenicLoading ? (
+            <Text style={styles.nearbyStateText}>正在获取高德周边景点...</Text>
+          ) : null}
+          {featuredScenicError ? (
+            <Text style={styles.nearbyStateText}>{featuredScenicError}</Text>
+          ) : null}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalList}
           >
-            {FEATURED_SITES.map((site) => (
+            {(featuredScenic.length > 0 ? featuredScenic : FEATURED_SITES).map((site) => (
               <SiteCard
                 key={site.id}
                 name={site.name}
                 province={site.province}
                 city={site.city}
-                dynasty={site.dynasty}
+                dynasty={'district' in site ? site.city : site.dynasty}
                 type={site.type}
-                image={site.image}
+                image={site.image || FEATURED_SITES[0].image}
                 tags={site.tags}
                 rating={site.rating}
                 distance={site.distance}
-                isStamped={site.isStamped}
+                isStamped={'isStamped' in site ? site.isStamped : false}
                 level={site.level}
                 onPress={() => {}}
+                onNavigate={
+                  'lng' in site && 'lat' in site
+                    ? () => {
+                        void handleNavigateFeaturedSite(site);
+                      }
+                    : undefined
+                }
               />
             ))}
           </ScrollView>
