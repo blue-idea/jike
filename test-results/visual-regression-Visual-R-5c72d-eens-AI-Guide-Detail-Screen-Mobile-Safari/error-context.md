@@ -25,7 +25,7 @@ Call log:
     - disabled all CSS animations
   - waiting for fonts to load...
   - fonts loaded
-  - 49279 pixels (ratio 0.20 of all image pixels) are different.
+  - 48736 pixels (ratio 0.19 of all image pixels) are different.
   - waiting 100ms before taking screenshot
   - taking page screenshot
     - disabled all CSS animations

@@ -110,12 +110,30 @@ export default function JourneyScreen() {
   };
 
   const handleOptimize = async () => {
-    const optimized = optimizeRoute(toRoutePoints()).map((point) => {
+    const candidates = toRoutePoints();
+    if (candidates.length < 2) {
+      setRouteError('至少需要两个点位才能优化路线');
+      return;
+    }
+
+    const optimized = optimizeRoute(candidates);
+    const filtered: typeof routePoints = [];
+    for (const point of optimized) {
       const original = routePoints.find((item) => item.id === point.id);
-      return original ?? routePoints[0];
-    });
-    setRoutePoints(optimized);
-    await recalculateRoute(optimized);
+      if (original) {
+        filtered.push(original);
+      } else {
+        console.warn('[Journey] optimizeRoute returned an unexpected point ID:', point.id, point.name);
+      }
+    }
+
+    if (filtered.length < 2) {
+      setRouteError('优化后路线点位不足，无法重新规划');
+      return;
+    }
+
+    setRoutePoints(filtered);
+    await recalculateRoute(filtered);
   };
 
   const handleNavigate = async (point: RoutePoint) => {

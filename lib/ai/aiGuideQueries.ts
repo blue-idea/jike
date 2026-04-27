@@ -9,8 +9,16 @@
  */
 import { supabase } from '@/lib/supabase';
 
+export type PoiType = 'scenic' | 'heritage' | 'museum';
+
 export interface GuideSection {
-  type: 'background' | 'cultural' | 'poetry' | 'story' | 'timeline' | 'attraction';
+  type:
+    | 'background'
+    | 'cultural'
+    | 'poetry'
+    | 'story'
+    | 'timeline'
+    | 'attraction';
   title: string;
   content: string;
 }
@@ -31,18 +39,38 @@ export interface AiGuideState {
 }
 
 /** 默认超时时间（秒） */
-export const AI_TIMEOUT_SECONDS = 60;
+export const AI_TIMEOUT_SECONDS = (() => {
+  const raw = Number(process.env.EXPO_PUBLIC_AI_TIMEOUT_SECONDS ?? '60');
+  if (!Number.isFinite(raw) || raw <= 0) return 60;
+  return Math.floor(raw);
+})();
 
 /** 中文超时提示 */
 export const TIMEOUT_MESSAGE =
-  'AI 生成超时（超过 60 秒），请稍后重试。\n如多次失败请检查网络连接。';
+  `AI 生成超时（超过 ${AI_TIMEOUT_SECONDS} 秒），请稍后重试。\n如多次失败请检查网络连接。`;
 
 /** 中文错误提示（通用） */
 export const GENERAL_ERROR_MESSAGE = 'AI 讲解生成失败，请稍后重试。';
+export const DEFAULT_GUIDE_DISCLAIMER =
+  '以上内容由 AI 生成，仅供参考。\n如有疏漏请以官方权威信息为准。';
 
-function mapErrorToChinese(error: unknown): string {
+export function mapAiGuideErrorToChinese(error: unknown): string {
   if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
+    const raw = error.message;
+    const msg = raw.toLowerCase();
+    if (msg.includes('未部署') || msg.includes('未配置')) {
+      return raw;
+    }
+    if (msg.includes('请先登录') || msg.includes('401') || msg.includes('auth')) {
+      return '请先登录后再使用 AI 讲解功能。';
+    }
+    if (
+      msg.includes('requested function was not found') ||
+      msg.includes('not_found') ||
+      msg.includes('http 404')
+    ) {
+      return 'AI 导游服务未部署（ai-guide）。请先在 Supabase 部署 Edge Function 后再试。';
+    }
     if (
       msg.includes('timeout') ||
       msg.includes('etimedout') ||
@@ -53,22 +81,128 @@ function mapErrorToChinese(error: unknown): string {
     if (msg.includes('network') || msg.includes('fetch')) {
       return '网络连接失败，请检查网络后重试。';
     }
+    if (msg.includes('429') || msg.includes('rate')) {
+      return '当前请求过于频繁，请稍后重试。';
+    }
   }
   return GENERAL_ERROR_MESSAGE;
 }
 
+interface GenerateAiGuideRequest {
+  poi_id: string;
+  poi_type: PoiType;
+  poi_name?: string;
+  locale?: string;
+}
+
+interface EdgeErrorShape {
+  code?: string;
+  message_zh?: string;
+  message?: string;
+}
+
+interface EdgeResponseShape {
+  data?: unknown;
+  error?: string | EdgeErrorShape | null;
+}
+
+function parseGuideSections(input: unknown): GuideSection[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const section = item as Partial<GuideSection>;
+      if (
+        typeof section.type !== 'string' ||
+        typeof section.title !== 'string' ||
+        typeof section.content !== 'string'
+      ) {
+        return null;
+      }
+      return {
+        type: section.type as GuideSection['type'],
+        title: section.title,
+        content: section.content,
+      };
+    })
+    .filter((item): item is GuideSection => Boolean(item));
+}
+
+function normalizeAiGuideResult(payload: unknown): AiGuideResult {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('AI 服务返回内容为空，请稍后重试。');
+  }
+
+  const raw = payload as Partial<AiGuideResult>;
+  const sections = parseGuideSections(raw.sections);
+  if (sections.length === 0) {
+    throw new Error('AI 服务未返回可展示讲解内容，请重试。');
+  }
+
+  return {
+    sections,
+    disclaimer:
+      typeof raw.disclaimer === 'string' && raw.disclaimer.trim().length > 0
+        ? raw.disclaimer
+        : DEFAULT_GUIDE_DISCLAIMER,
+    poi_name:
+      typeof raw.poi_name === 'string' && raw.poi_name.trim().length > 0
+        ? raw.poi_name
+        : '文化地标',
+    generated_at:
+      typeof raw.generated_at === 'string' && raw.generated_at.trim().length > 0
+        ? raw.generated_at
+        : new Date().toISOString(),
+  };
+}
+
+async function readEdgeError(response: Response): Promise<string> {
+  let body: EdgeResponseShape | null = null;
+  try {
+    body = (await response.json()) as EdgeResponseShape;
+  } catch {
+    body = null;
+  }
+
+  if (response.status === 401) {
+    return '请先登录后再使用 AI 讲解功能。';
+  }
+  if (response.status === 404) {
+    return 'AI 导游服务未部署（ai-guide）。请先在 Supabase 部署 Edge Function 后再试。';
+  }
+  if (response.status === 408 || response.status === 504) {
+    return TIMEOUT_MESSAGE;
+  }
+
+  if (!body?.error) {
+    return `HTTP ${response.status}`;
+  }
+
+  if (typeof body.error === 'string') {
+    return body.error;
+  }
+
+  if (body.error.message_zh) return body.error.message_zh;
+  if (body.error.message) return body.error.message;
+  if (body.error.code) return body.error.code;
+  return `HTTP ${response.status}`;
+}
+
 /**
  * 调用 AI 导游生成（通过 Supabase Edge Functions）
- * EARS-1: 返回结构化讲解（背景、文化解读、诗词、人物故事、时间线、重要看点）+ 免责声明
+ * EARS-1: 返回结构化讲解（背景、文化解读、主要看点、人物故事、时间线、参观建议）+ 免责声明
  * EARS-2: 登录态强制校验，超时 T 秒中文提示 + 重试
  *
  * @param poiId POI 的 Supabase id
  * @param poiType POI 类型（scenic / heritage / museum）
+ * @param locale 语言区域
  * @param abortSignal 可选的 AbortSignal，用于主动取消
  */
 export async function generateAiGuide(
   poiId: string,
-  poiType: 'scenic' | 'heritage' | 'museum',
+  poiType: PoiType,
+  poiName?: string,
+  locale = 'zh-CN',
   abortSignal?: AbortSignal,
 ): Promise<AiGuideResult> {
   // 获取当前 session（用于 Edge 鉴权）
@@ -80,52 +214,66 @@ export async function generateAiGuide(
   if (!accessToken) {
     throw new Error('请先登录后再使用 AI 讲解功能。');
   }
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error('未配置 Supabase 地址，无法调用 AI 服务。');
+  }
 
   const controller = new AbortController();
+  const handleAbort = () => controller.abort();
   const timeout = setTimeout(
-    () => controller.abort(),
+    handleAbort,
     AI_TIMEOUT_SECONDS * 1000,
   );
 
   // 合并外部 abortSignal
-  let registered = false;
   if (abortSignal) {
-    abortSignal.addEventListener('abort', () => controller.abort());
-    registered = true;
+    abortSignal.addEventListener('abort', handleAbort);
   }
 
   try {
+    const body: GenerateAiGuideRequest = {
+      poi_id: poiId,
+      poi_type: poiType,
+      ...(poiName ? { poi_name: poiName } : {}),
+      locale,
+    };
+
     const response = await fetch(
-      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-guide`,
+      `${supabaseUrl}/functions/v1/ai-guide`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ poi_id: poiId, poi_type: poiType }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       },
     );
 
-    clearTimeout(timeout);
-
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const edgeError = await readEdgeError(response);
+      throw new Error(edgeError);
     }
 
-    const json = await response.json();
-    if (json.error) {
-      throw new Error(json.error);
+    const json = (await response.json()) as EdgeResponseShape | AiGuideResult;
+    if ('error' in (json as EdgeResponseShape) && (json as EdgeResponseShape).error) {
+      const err = (json as EdgeResponseShape).error;
+      if (typeof err === 'string') throw new Error(err);
+      throw new Error(err?.message_zh ?? err?.message ?? err?.code ?? GENERAL_ERROR_MESSAGE);
     }
 
-    return json as AiGuideResult;
+    const payload = 'data' in (json as EdgeResponseShape)
+      ? (json as EdgeResponseShape).data
+      : json;
+    return normalizeAiGuideResult(payload);
   } catch (error) {
-    clearTimeout(timeout);
-    throw error;
+    throw new Error(mapAiGuideErrorToChinese(error));
   } finally {
-    if (registered && abortSignal) {
-      abortSignal.removeEventListener('abort', () => controller.abort());
+    clearTimeout(timeout);
+    if (abortSignal) {
+      abortSignal.removeEventListener('abort', handleAbort);
     }
   }
 }
@@ -136,15 +284,14 @@ export async function generateAiGuide(
  */
 export async function generateAiGuideMock(
   _poiId: string,
-  _poiType: 'scenic' | 'heritage' | 'museum',
+  _poiType: PoiType,
 ): Promise<AiGuideResult> {
   await new Promise((r) => setTimeout(r, 1200)); // 模拟网络延迟
 
   return {
     poi_name: '示例文化地标',
     generated_at: new Date().toISOString(),
-    disclaimer:
-      '以上内容由 AI 生成，仅供参考。\n如有疏漏请以官方权威信息为准。',
+    disclaimer: DEFAULT_GUIDE_DISCLAIMER,
     sections: [
       {
         type: 'background',
@@ -160,9 +307,9 @@ export async function generateAiGuideMock(
       },
       {
         type: 'poetry',
-        title: '相关诗词',
+        title: '主要看点',
         content:
-          '「江山留胜迹，我辈复登临。」\n—— 孟浩然\n登临此地，古今相望，文化传承生生不息。',
+          '建议优先关注最具代表性的主体建筑、标志性展陈、空间轴线和最能体现地方文化特征的细节，这些通常是理解整个景点的最佳切入口。',
       },
       {
         type: 'story',
@@ -178,8 +325,9 @@ export async function generateAiGuideMock(
       },
       {
         type: 'attraction',
-        title: '重要看点',
-        content: '1. 核心古建筑群\n2. 碑刻与题记\n3. 周边自然景观\n4. 专题展览',
+        title: '参观建议',
+        content:
+          '1. 先看核心区域，再补充边缘空间\n2. 优先阅读现场说明牌\n3. 适合结合讲解或语音播报慢速参观\n4. 若时间有限，可围绕一条主线深看而非走马观花',
       },
     ],
   };

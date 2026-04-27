@@ -4,8 +4,8 @@
  * TTS 播报控制按钮（EARS-1：支持播放/暂停基础控制）
  */
 import React from 'react';
-import { StyleSheet, TouchableOpacity } from 'react-native';
-import { Volume2, VolumeX } from 'lucide-react-native';
+import { Alert, ActivityIndicator, StyleSheet, TouchableOpacity } from 'react-native';
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { useTts } from '@/hooks/useTts';
 
@@ -16,29 +16,72 @@ interface TtsControlButtonProps {
 }
 
 export function TtsControlButton({ fullText, size = 22 }: TtsControlButtonProps) {
-  const { isPlaying, speak, stop } = useTts();
+  const { state, isPlaying, isLoading, speak, pause, resume, stop } = useTts();
 
-  const handlePress = () => {
-    if (isPlaying) {
-      stop();
-    } else {
-      void speak(fullText);
+  const handlePress = async () => {
+    try {
+      if (isLoading) return;
+      if (isPlaying) {
+        await pause();
+      } else if (state === 'paused') {
+        await resume();
+      } else {
+        await speak(fullText);
+      }
+    } catch (error) {
+      Alert.alert(
+        '语音播报失败',
+        error instanceof Error ? error.message : '请稍后重试。',
+      );
+      await stop();
     }
   };
 
+  const handleLongPress = async () => {
+    if (state !== 'idle') {
+      await stop();
+    }
+  };
+
+  const accessibilityLabel = isLoading
+    ? '语音加载中'
+    : isPlaying
+      ? '暂停语音播报'
+      : state === 'paused'
+        ? '继续语音播报'
+        : '开始语音播报';
+
+  const renderIcon = () => {
+    if (isLoading) {
+      return <ActivityIndicator color={Colors.primary} size="small" />;
+    }
+    if (isPlaying) {
+      return <Pause size={size} color={Colors.white} />;
+    }
+    if (state === 'paused') {
+      return <Play size={size} color={Colors.primary} />;
+    }
+    return <Volume2 size={size} color={Colors.primary} />;
+  };
+
+  const activeState = isPlaying;
+
   return (
     <TouchableOpacity
-      style={[styles.btn, isPlaying && styles.btnActive]}
-      onPress={handlePress}
+      style={[styles.btn, activeState && styles.btnActive]}
+      onPress={() => {
+        void handlePress();
+      }}
+      onLongPress={() => {
+        void handleLongPress();
+      }}
       activeOpacity={0.7}
-      accessibilityLabel={isPlaying ? '停止语音播报' : '开始语音播报'}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint="长按可停止并重置语音播报"
       accessibilityRole="button"
     >
-      {isPlaying ? (
-        <VolumeX size={size} color={Colors.white} />
-      ) : (
-        <Volume2 size={size} color={Colors.primary} />
-      )}
+      {renderIcon()}
+      {activeState ? <VolumeX size={12} color={Colors.white} style={styles.cornerIcon} /> : null}
     </TouchableOpacity>
   );
 }
@@ -53,9 +96,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: Colors.primary,
+    position: 'relative',
   },
   btnActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+  },
+  cornerIcon: {
+    position: 'absolute',
+    right: -4,
+    top: -3,
   },
 });

@@ -18,9 +18,8 @@ appId: com.jike.app
 - waitForTimeout: 3000
 
 # 进入 AI 导游页面
-- tapOn: "工具"
-- waitForTimeout: 1000
-- tapOn: "AI 导游"
+- assertVisible: "首页"
+- tapOn: "AI文化向导"
 - waitForTimeout: 2000
 
 # 验证 AI 导游页面元素
@@ -36,8 +35,9 @@ appId: com.jike.app
 - waitForTimeout: 8000
 
 # 验证讲解结果展示
-- assertVisible: "历史背景"
 - assertVisible: "重试"
+- assertVisible: "选择类别"
+- assertVisible: "选择地标"
 
 # 测试重试按钮
 - tapOn: "重试"

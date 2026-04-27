@@ -78,7 +78,16 @@ export default function AiCameraResultScreen() {
 
           <TouchableOpacity 
             style={styles.actionBtn}
-            onPress={() => router.push('/ai-guide-detail')}
+            onPress={() =>
+              router.push({
+                pathname: '/ai-guide-detail',
+                params: {
+                  poiId: 'heritage_nanchan_temple',
+                  poiType: 'heritage',
+                  poiName: '南禅寺大殿',
+                },
+              })
+            }
           >
             <LinearGradient
               colors={[Colors.primary, Colors.primaryDark]}

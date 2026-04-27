@@ -1,189 +1,349 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Image,
-  TouchableOpacity, Dimensions, StatusBar
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  ChevronLeft, Share2, Bookmark, MapPin, 
-  History, Landmark, ScrollText, UserCircle2,
-  Sparkles, Info, Volume2
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import {
+  Clock4,
+  History,
+  Info,
+  Landmark,
+  ScrollText,
+  Sparkles,
+  Star,
+  UserCircle2,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { Colors, Gradients } from '@/constants/Colors';
 import { CommonTopBar } from '@/components/ui/CommonTopBar';
+import { TtsControlButton } from '@/components/ai/TtsControlButton';
+import { Colors } from '@/constants/Colors';
+import { useAiGuide } from '@/hooks/useAiGuide';
+import type { PoiType } from '@/lib/ai/aiGuideQueries';
 
-const { width } = Dimensions.get('window');
+type PoiOption = {
+  id: string;
+  name: string;
+  poiType: PoiType;
+  subtitle: string;
+};
+
+const PRESET_POIS: PoiOption[] = [
+  {
+    id: 'heritage_nanchan_temple',
+    name: '南禅寺大殿',
+    poiType: 'heritage',
+    subtitle: '山西 · 唐代木构',
+  },
+  {
+    id: 'museum_shaanxi_history',
+    name: '陕西历史博物馆',
+    poiType: 'museum',
+    subtitle: '陕西 · 国家一级博物馆',
+  },
+  {
+    id: 'scenic_terracotta_army',
+    name: '秦始皇帝陵博物院',
+    poiType: 'scenic',
+    subtitle: '陕西 · 5A 景区',
+  },
+];
+
+const TYPE_OPTIONS: { type: PoiType; label: string }[] = [
+  { type: 'scenic', label: '景区' },
+  { type: 'heritage', label: '国保' },
+  { type: 'museum', label: '博物馆' },
+];
+
+const SECTION_META: Record<
+  string,
+  { title: string; icon: React.ComponentType<{ size?: number; color?: string }> }
+> = {
+  background: { title: '历史背景', icon: History },
+  cultural: { title: '文化解读', icon: Landmark },
+  poetry: { title: '主要看点', icon: ScrollText },
+  story: { title: '人物故事', icon: UserCircle2 },
+  timeline: { title: '朝代演变', icon: Clock4 },
+  attraction: { title: '参观建议', icon: Star },
+};
+
+function isPoiType(value: string | undefined): value is PoiType {
+  return value === 'scenic' || value === 'heritage' || value === 'museum';
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '刚刚生成';
+  return date.toLocaleString('zh-CN', { hour12: false });
+}
 
 export default function AiGuideDetailScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    poiId?: string;
+    poiType?: string;
+    poiName?: string;
+  }>();
+  const [activeType, setActiveType] = useState<PoiType>(
+    isPoiType(params.poiType) ? params.poiType : 'heritage',
+  );
+  const loginAlertShown = useRef(false);
 
-  const handleBack = () => {
-    router.back();
+  const poiOptions = useMemo(() => {
+    const options = [...PRESET_POIS];
+    const routePoiType = isPoiType(params.poiType) ? params.poiType : null;
+    if (
+      routePoiType &&
+      params.poiId &&
+      params.poiName &&
+      !options.some((item) => item.id === params.poiId)
+    ) {
+      options.unshift({
+        id: params.poiId,
+        name: params.poiName,
+        poiType: routePoiType,
+        subtitle: '来自当前点位选择',
+      });
+    }
+    return options;
+  }, [params.poiId, params.poiName, params.poiType]);
+
+  const visiblePois = useMemo(
+    () => poiOptions.filter((item) => item.poiType === activeType),
+    [activeType, poiOptions],
+  );
+
+  const [selectedPoiId, setSelectedPoiId] = useState<string>(() => {
+    if (params.poiId && isPoiType(params.poiType)) return params.poiId;
+    const fallback = PRESET_POIS.find((item) => item.poiType === 'heritage');
+    return fallback?.id ?? PRESET_POIS[0].id;
+  });
+
+  useEffect(() => {
+    if (visiblePois.length === 0) return;
+    const stillExists = visiblePois.some((item) => item.id === selectedPoiId);
+    if (!stillExists) setSelectedPoiId(visiblePois[0].id);
+  }, [selectedPoiId, visiblePois]);
+
+  const selectedPoi = useMemo(
+    () =>
+      poiOptions.find((item) => item.id === selectedPoiId) ??
+      visiblePois[0] ??
+      poiOptions[0],
+    [poiOptions, selectedPoiId, visiblePois],
+  );
+
+  const {
+    status,
+    result,
+    errorMessage,
+    generate,
+    retry,
+    reset,
+    lastRequest,
+    needsLogin,
+    speakableText,
+  } = useAiGuide();
+
+  useEffect(() => {
+    if (!needsLogin || loginAlertShown.current) return;
+    loginAlertShown.current = true;
+    Alert.alert('请先登录', '使用 AI 导游前需要先登录账号。', [
+      {
+        text: '去登录',
+        onPress: () => {
+          loginAlertShown.current = false;
+          router.replace('/(auth)/login');
+        },
+      },
+      {
+        text: '取消',
+        style: 'cancel',
+        onPress: () => {
+          loginAlertShown.current = false;
+        },
+      },
+    ]);
+  }, [needsLogin, router]);
+
+  const handleGenerate = () => {
+    if (!selectedPoi) return;
+    void generate({
+      poiId: selectedPoi.id,
+      poiType: selectedPoi.poiType,
+      poiName: selectedPoi.name,
+      locale: 'zh-CN',
+    });
+  };
+
+  const handleRetry = () => {
+    if (!lastRequest) return;
+    void retry();
   };
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
-      <CommonTopBar 
+      <CommonTopBar
         rightElement={
-          <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.headerBtn}>
-              <Share2 size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.headerBtn}>
-              <Bookmark size={20} color={Colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.resetBtn} onPress={reset}>
+            <Text style={styles.resetBtnText}>清空</Text>
+          </TouchableOpacity>
         }
       />
 
-      <ScrollView 
-        style={styles.container} 
+      <ScrollView
+        style={styles.container}
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]}
+        contentContainerStyle={styles.contentContainer}
       >
-        {/* Hero Section placeholder - will be handled by content below or integrated */}
-        <View style={styles.heroSection}>
-          <Image 
-            source={{ uri: 'https://images.pexels.com/photos/2034335/pexels-photo-2034335.jpeg?auto=compress&cs=tinysrgb&w=1200' }} 
-            style={styles.heroImage} 
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.8)']}
-            style={styles.heroGradient}
-          />
-          <View style={styles.heroContent}>
-            <View style={styles.badgeRow}>
-              <View style={[styles.badge, { backgroundColor: Colors.accent }]}>
-                <Sparkles size={12} color={Colors.white} />
-                <Text style={styles.badgeText}>AI Scholar Guide</Text>
-              </View>
-              <View style={[styles.badge, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
-                <Text style={styles.badgeText}>唐代建筑</Text>
-              </View>
-            </View>
-            <Text style={styles.heroTitle}>南禅寺 Nanchan Temple</Text>
-            <View style={styles.locationRow}>
-              <MapPin size={14} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.locationText}>山西·五台县 | 公元782年</Text>
-            </View>
+        <View style={styles.heroCard}>
+          <View style={styles.heroBadge}>
+            <Sparkles size={14} color={Colors.white} />
+            <Text style={styles.heroBadgeText}>AI 导游</Text>
+          </View>
+          <Text style={styles.heroTitle}>结构化文化讲解</Text>
+          <Text style={styles.heroSubtitle}>
+            仅通过 Supabase Edge Functions 生成，支持超时提示、重试与语音播报。
+          </Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>选择类别</Text>
+          <View style={styles.typeRow}>
+            {TYPE_OPTIONS.map((item) => (
+              <TouchableOpacity
+                key={item.type}
+                style={[
+                  styles.typeChip,
+                  activeType === item.type && styles.typeChipActive,
+                ]}
+                onPress={() => setActiveType(item.type)}
+              >
+                <Text
+                  style={[
+                    styles.typeChipText,
+                    activeType === item.type && styles.typeChipTextActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
 
-        <View style={styles.contentCard}>
-          <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <Text style={styles.metaValue}>最早</Text>
-              <Text style={styles.metaLabel}>唐代木构</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.metaItem}>
-              <Text style={styles.metaValue}>17尊</Text>
-              <Text style={styles.metaLabel}>唐代彩塑</Text>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.metaItem}>
-              <Text style={styles.metaValue}>国一</Text>
-              <Text style={styles.metaLabel}>文保级别</Text>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Info size={20} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>正殿建筑艺术解析</Text>
-            </View>
-            <Text style={styles.paragraph}>
-              南禅寺大佛殿坐落于山西五台县阳白乡李家庄。它是中国现存最早的木结构建筑，不仅是建筑史上的奇迹，更是大唐风华的物质载体。
-            </Text>
-          </View>
-
-          <View style={styles.aiInsightBox}>
-            <LinearGradient
-              colors={[Colors.backgroundAlt, Colors.card]}
-              style={styles.aiBoxInner}
-            >
-              <View style={styles.aiBoxHeader}>
-                <Sparkles size={16} color={Colors.accent} />
-                <Text style={styles.aiBoxTitle}>AI 深度解读</Text>
-              </View>
-              <Text style={styles.aiBoxText}>
-                建筑采用了“减柱法”的先雏形，内部空间宽敞明亮。最为精妙的是其斗拱结构，大斗与足材枋木交错衔接，犹如精准的榫卯交响。这种不着一钉的智慧，正是东方建筑哲学的巅峰表现。
-              </Text>
-            </LinearGradient>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <History size={20} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>历史背景</Text>
-            </View>
-            <Text style={styles.paragraph}>
-              南禅寺始建年代不详，但重建于唐建中三年（公元782年）。在唐代“会昌法难”中，全国寺院大多毁损，唯此地由于地处偏僻，侥幸逃过一劫，成为弥足珍贵的唐代实物。
-            </Text>
-          </View>
-
-          <View style={styles.poemCard}>
-            <ScrollText size={32} color={Colors.accentLight} style={styles.quoteIcon} />
-            <Text style={styles.poemText}>松径绕山晖，禅心远是非。</Text>
-            <Text style={styles.poemText}>一从香火后，独见白云飞。</Text>
-            <Text style={styles.poemAuthor}>—— 历代诗咏</Text>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <UserCircle2 size={20} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>人物故事</Text>
-            </View>
-            <View style={styles.storyContent}>
-              <Text style={styles.paragraph}>
-                1953年的黄昏，祁英涛与莫宗江两位先生跋涉至此。当他们抬头看见大殿脊檩上的墨书“大唐建中三年”时，那种跨越千年的激动可想而知。在此之前，学界普遍认为中国境内已无唐代木构。
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.timelineSection}>
-              <View style={styles.sectionHeader}>
-                <Landmark size={20} color={Colors.primary} />
-                <Text style={styles.sectionTitle}>朝代演变</Text>
-              </View>
-              <View style={styles.timeline}>
-                {[
-                  { year: '782', event: '重建佛殿', desc: '唐建中三年，南禅寺大佛殿进行大规模重建，确立了今日所见的基础轮廓。' },
-                  { year: '845', event: '会昌法难', desc: '唐武宗大规模拆毁佛寺，南禅寺因地处偏远小村，躲过灭顶之灾。' },
-                  { year: '1953', event: '学术再发现', desc: '国家文物局勘察小组发现并鉴定其为中国现存最早唐代木结构。' },
-                ].map((item, idx) => (
-                  <View key={idx} style={styles.timelineItem}>
-                    <View style={styles.timelineLeft}>
-                      <Text style={styles.timelineYear}>{item.year}</Text>
-                      <View style={styles.timelineLine} />
-                      <View style={styles.timelineDot} />
-                    </View>
-                    <View style={styles.timelineRight}>
-                      <Text style={styles.timelineEvent}>{item.event}</Text>
-                      <Text style={styles.timelineDesc}>{item.desc}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>选择地标</Text>
+          <View style={styles.poiList}>
+            {visiblePois.map((poi) => {
+              const selected = poi.id === selectedPoiId;
+              return (
+                <TouchableOpacity
+                  key={poi.id}
+                  style={[styles.poiCard, selected && styles.poiCardActive]}
+                  onPress={() => setSelectedPoiId(poi.id)}
+                >
+                  <Text
+                    style={[styles.poiName, selected && styles.poiNameActive]}
+                    numberOfLines={1}
+                  >
+                    {poi.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.poiSubtitle,
+                      selected && styles.poiSubtitleActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {poi.subtitle}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => {}}
-      >
-        <LinearGradient
-          colors={Gradients.accent}
-          style={styles.fabGradient}
+        <TouchableOpacity
+          style={[styles.generateBtn, status === 'requesting' && styles.generateBtnDisabled]}
+          disabled={status === 'requesting' || !selectedPoi}
+          onPress={handleGenerate}
         >
-          <Volume2 size={24} color={Colors.white} />
-        </LinearGradient>
-      </TouchableOpacity>
+          {status === 'requesting' ? (
+            <View style={styles.generatingRow}>
+              <ActivityIndicator color={Colors.white} />
+              <Text style={styles.generateBtnText}>正在生成讲解...</Text>
+            </View>
+          ) : (
+            <Text style={styles.generateBtnText}>生成讲解</Text>
+          )}
+        </TouchableOpacity>
+
+        {lastRequest && status !== 'requesting' ? (
+          <TouchableOpacity style={styles.retryGhostBtn} onPress={handleRetry}>
+            <Text style={styles.retryGhostBtnText}>重试</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {errorMessage ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>生成失败</Text>
+            <Text style={styles.errorText}>{errorMessage}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry}>
+              <Text style={styles.retryBtnText}>立即重试</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {result ? (
+          <View style={styles.resultCard}>
+            <View style={styles.resultHead}>
+              <View style={styles.resultHeadText}>
+                <Text style={styles.resultTitle}>AI 导游：{result.poi_name}</Text>
+                <Text style={styles.generatedAt}>
+                  生成时间：{formatDateTime(result.generated_at)}
+                </Text>
+              </View>
+              <TtsControlButton fullText={speakableText} />
+            </View>
+
+            {result.sections.map((section, index) => {
+              const meta = SECTION_META[section.type] ?? {
+                title: section.title,
+                icon: Info,
+              };
+              const Icon = meta.icon;
+              return (
+                <View key={`${section.type}_${index}`} style={styles.sectionCard}>
+                  <View style={styles.sectionHeader}>
+                    <Icon size={18} color={Colors.primary} />
+                    <Text style={styles.sectionCardTitle}>
+                      {section.title || meta.title}
+                    </Text>
+                  </View>
+                  <Text style={styles.sectionBody}>{section.content}</Text>
+                </View>
+              );
+            })}
+
+            <View style={styles.disclaimerCard}>
+              <Info size={16} color={Colors.textMuted} />
+              <Text style={styles.disclaimerText}>{result.disclaimer}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.placeholderCard}>
+            <Text style={styles.placeholderTitle}>等待生成讲解</Text>
+            <Text style={styles.placeholderText}>
+              选择一个地标后点击“生成讲解”，将返回历史背景、文化解读、主要看点、人物故事、朝代演变与参观建议。
+            </Text>
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -193,272 +353,262 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  headerRight: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  headerBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.cardMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   container: {
     flex: 1,
   },
-  heroSection: {
-    width: '100%',
-    height: 300,
-    position: 'relative',
+  contentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 28,
+    gap: 14,
   },
-  heroImage: {
-    width: '100%',
-    height: '100%',
+  resetBtn: {
+    backgroundColor: Colors.cardMuted,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  heroGradient: {
-    ...StyleSheet.absoluteFillObject,
+  resetBtnText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
   },
-  heroContent: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 24,
-  },
-  badgeRow: {
-    flexDirection: 'row',
+  heroCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: 16,
+    padding: 16,
     gap: 8,
-    marginBottom: 12,
   },
-  badge: {
+  heroBadge: {
     flexDirection: 'row',
+    alignSelf: 'flex-start',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: Colors.accent,
   },
-  badgeText: {
+  heroBadgeText: {
     color: Colors.white,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   heroTitle: {
-    fontSize: 28,
-    fontWeight: '800',
     color: Colors.white,
-    marginBottom: 8,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  locationText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  contentCard: {
-    backgroundColor: Colors.background,
-    marginTop: -20,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 16,
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    marginBottom: 24,
-    shadowColor: Colors.text,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  metaItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  metaValue: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '800',
-    color: Colors.primary,
-    marginBottom: 4,
   },
-  metaLabel: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    fontWeight: '600',
-  },
-  divider: {
-    width: 1,
-    height: 30,
-    backgroundColor: Colors.border,
+  heroSubtitle: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 13,
+    lineHeight: 20,
   },
   section: {
-    marginBottom: 32,
+    gap: 10,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  typeChip: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  typeChipActive: {
+    backgroundColor: Colors.primary + '14',
+    borderColor: Colors.primary + '44',
+  },
+  typeChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textMuted,
+  },
+  typeChipTextActive: {
+    color: Colors.primary,
+  },
+  poiList: {
+    gap: 8,
+  },
+  poiCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.card,
+    padding: 12,
+    gap: 4,
+  },
+  poiCardActive: {
+    borderColor: Colors.primary + '66',
+    backgroundColor: Colors.primary + '10',
+  },
+  poiName: {
+    fontSize: 14,
+    color: Colors.text,
+    fontWeight: '700',
+  },
+  poiNameActive: {
+    color: Colors.primaryDark,
+  },
+  poiSubtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  poiSubtitleActive: {
+    color: Colors.primary,
+  },
+  generateBtn: {
+    borderRadius: 12,
+    backgroundColor: Colors.primary,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  generateBtnDisabled: {
+    opacity: 0.75,
+  },
+  generatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  generateBtnText: {
+    color: Colors.white,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  errorCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D97171',
+    backgroundColor: '#FFF3F3',
+    padding: 12,
+    gap: 8,
+  },
+  errorTitle: {
+    fontSize: 14,
+    color: '#A63737',
+    fontWeight: '800',
+  },
+  errorText: {
+    fontSize: 13,
+    color: '#803434',
+    lineHeight: 20,
+  },
+  retryBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  retryBtnText: {
+    color: Colors.white,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  retryGhostBtn: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.primary + '55',
+    backgroundColor: Colors.primary + '10',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+  },
+  retryGhostBtnText: {
+    color: Colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  resultCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.card,
+    padding: 12,
+    gap: 10,
+  },
+  resultHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  resultHeadText: {
+    flex: 1,
+    gap: 3,
+  },
+  resultTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: Colors.text,
+  },
+  generatedAt: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  sectionCard: {
+    borderRadius: 10,
+    backgroundColor: Colors.backgroundAlt,
+    padding: 10,
+    gap: 6,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    gap: 6,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: Colors.text,
-    letterSpacing: 0.5,
-  },
-  paragraph: {
-    fontSize: 15,
-    color: Colors.textSecondary,
-    lineHeight: 26,
-    letterSpacing: 0.2,
-  },
-  aiInsightBox: {
-    marginBottom: 32,
-  },
-  aiBoxInner: {
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-  },
-  aiBoxHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  aiBoxTitle: {
+  sectionCardTitle: {
     fontSize: 14,
+    color: Colors.text,
     fontWeight: '700',
-    color: Colors.accent,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
   },
-  aiBoxText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-    lineHeight: 24,
-    fontStyle: 'italic',
-  },
-  poemCard: {
-    backgroundColor: '#FDF9EF',
-    padding: 30,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: '#E8DFD0',
-  },
-  quoteIcon: {
-    marginBottom: 16,
-    opacity: 0.5,
-  },
-  poemText: {
-    fontSize: 16,
-    color: Colors.text,
-    fontWeight: '600',
-    marginBottom: 4,
-    letterSpacing: 2,
-  },
-  poemAuthor: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 16,
-    fontWeight: '500',
-  },
-  storyContent: {
-    backgroundColor: Colors.card,
-    padding: 20,
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: Colors.primary,
-  },
-  timelineSection: {
-    marginBottom: 20,
-  },
-  timeline: {
-    marginTop: 10,
-    paddingLeft: 8,
-  },
-  timelineItem: {
-    flexDirection: 'row',
-    marginBottom: 24,
-  },
-  timelineLeft: {
-    alignItems: 'center',
-    marginRight: 16,
-    width: 60,
-  },
-  timelineYear: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: Colors.primary,
-    marginBottom: 4,
-  },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 4,
-  },
-  timelineDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.accent,
-    position: 'absolute',
-    top: 22,
-    left: 26,
-  },
-  timelineRight: {
-    flex: 1,
-    paddingTop: 2,
-  },
-  timelineEvent: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.text,
-    marginBottom: 6,
-  },
-  timelineDesc: {
+  sectionBody: {
     fontSize: 13,
     color: Colors.textSecondary,
-    lineHeight: 20,
+    lineHeight: 21,
   },
-  fab: {
-    position: 'absolute',
-    bottom: 40,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    elevation: 8,
-    shadowColor: Colors.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
+  disclaimerCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.cardMuted,
+    padding: 10,
   },
-  fabGradient: {
+  disclaimerText: {
     flex: 1,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: 12,
+    color: Colors.textMuted,
+    lineHeight: 18,
   },
-  fabText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 1,
+  placeholderCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.card,
+    padding: 14,
+    gap: 8,
+  },
+  placeholderTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.text,
+  },
+  placeholderText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: Colors.textMuted,
   },
 });
