@@ -114,6 +114,12 @@ export default function TabLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="heatmap-trends"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
