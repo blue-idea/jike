@@ -30,7 +30,6 @@ import {
   formatScenicResultHint,
   type HeritageQueryFormState,
   sortScenicFeaturesByLevel,
-  sortMuseumCards,
   type MuseumQueryFormState,
   type ScenicLocationFormState,
 } from '@/lib/catalog/catalogQueryFilters';
@@ -110,7 +109,6 @@ const PAGE_SIZE = 5;
 const PLACEHOLDER = '\u8bf7\u9009\u62e9';
 const ALL_LEVEL = '\u5168\u90e8\u7b49\u7ea7';
 const ALL = '\u5168\u90e8';
-const SORT_BY_NEAREST = '\u79bb\u6211\u6700\u8fd1';
 
 function hasValidImage(image?: string) {
   return Boolean(image && image.trim());
@@ -150,6 +148,15 @@ function buildCommonFilterLocation(homeCatalogLocation: CatalogLocation | null) 
     city: homeCatalogLocation?.city ?? PLACEHOLDER,
     district: PLACEHOLDER,
     level: ALL_LEVEL,
+  };
+}
+
+function buildMuseumFilterLocation(homeCatalogLocation: CatalogLocation | null) {
+  return {
+    province: homeCatalogLocation?.province ?? PLACEHOLDER,
+    city: homeCatalogLocation?.city ?? PLACEHOLDER,
+    district: PLACEHOLDER,
+    level: ALL,
   };
 }
 
@@ -870,14 +877,14 @@ export function MuseumDirectoryContent({
 }: MuseumDirectoryContentProps = {}) {
   const { homeCatalogLocation } = useCatalogLocation();
   const museumFilterLocation = useMemo(
-    () => buildCommonFilterLocation(homeCatalogLocation),
+    () => buildMuseumFilterLocation(homeCatalogLocation),
     [homeCatalogLocation],
   );
   const initialMuseumFilters = useMemo<MuseumQueryFormState>(() => {
     const defaultLocation = buildCommonDirectoryDefaultFilters(homeCatalogLocation);
     return {
       ...defaultLocation,
-      sortBy: SORT_BY_NEAREST,
+      level: ALL,
     };
   }, [homeCatalogLocation]);
   const [museumResults, setMuseumResults] = useState<MuseumCardItem[]>(() => [
@@ -909,7 +916,7 @@ export function MuseumDirectoryContent({
         province: f.province !== '\u8bf7\u9009\u62e9' ? f.province : undefined,
         city: f.city !== '\u8bf7\u9009\u62e9' ? f.city : undefined,
         district: f.district !== '\u8bf7\u9009\u62e9' ? f.district : undefined,
-        sortBy: f.sortBy,
+        level: f.level !== '\u5168\u90e8' ? f.level : undefined,
         page,
         pageSize: PAGE_SIZE,
       });
@@ -923,7 +930,6 @@ export function MuseumDirectoryContent({
       console.warn('museum query failed, fallback to mock data', e);
       if (!append) {
         let next = filterMuseumCards([...MUSEUM_CARDS], f);
-        next = sortMuseumCards(next, f.sortBy);
         const paged = next.slice(0, PAGE_SIZE);
         setMuseumResults(paged);
         setMuseumHint(formatMuseumResultHint(f, paged.length));

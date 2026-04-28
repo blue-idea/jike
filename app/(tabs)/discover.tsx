@@ -17,7 +17,6 @@ import { ALL_DISTRICTS, type ScenicLocationFormState, type MuseumQueryFormState,
 const PLACEHOLDER = '请选择';
 const ALL_LEVEL = '全部等级';
 const ALL = '全部';
-const SORT_BY_NEAREST = '离我最近';
 
 export default function DiscoverScreen() {
   const { homeCatalogLocation } = useCatalogLocation();
@@ -43,7 +42,7 @@ export default function DiscoverScreen() {
     province: homeCatalogLocation?.province ?? PLACEHOLDER,
     city: homeCatalogLocation?.city ?? PLACEHOLDER,
     district: ALL_DISTRICTS,
-    sortBy: SORT_BY_NEAREST,
+    level: ALL,
     useAutoLocation: Boolean(homeCatalogLocation),
   });
 
@@ -181,7 +180,7 @@ export default function DiscoverScreen() {
             {activeTab === 'museum' && (
               <MuseumFilterPanel
                 primaryColor={Colors.primary}
-                defaultLocation={{ ...museumFilters, level: ALL_LEVEL }}
+                defaultLocation={museumFilters}
                 transparent
                 onApplyQuery={setMuseumFilters}
               />

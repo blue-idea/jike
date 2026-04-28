@@ -61,8 +61,8 @@ export interface MuseumQueryOptions {
   province?: string;
   city?: string;
   district?: string;
+  level?: string;
   keyword?: string;
-  sortBy?: string;
   limit?: number;
   page?: number;
   pageSize?: number;
@@ -421,8 +421,8 @@ export async function queryMuseums(
     province,
     city,
     district,
+    level,
     keyword,
-    sortBy,
     limit = 100,
     page,
     pageSize,
@@ -431,7 +431,7 @@ export async function queryMuseums(
 
   let q = supabase
     .from('catalog_museums')
-    .select('id,name,address,tel,pname,cityname,adname,lng,lat,recommend,sort,images')
+    .select('id,name,address,tel,pname,cityname,adname,lng,lat,level,recommend,sort,images')
     .range(paging.from, paging.to);
 
   if (province && !isPlaceholderValue(province)) {
@@ -448,6 +448,14 @@ export async function queryMuseums(
     q = q.eq('adname', district);
   }
 
+  if (level && !isAllValue(level)) {
+    if (level === '未定级') {
+      q = q.or('level.is.null,level.eq.');
+    } else {
+      q = q.eq('level', level);
+    }
+  }
+
   const { data, error } = await q;
   if (error) throw error;
   if (!data) return [];
@@ -458,10 +466,11 @@ export async function queryMuseums(
     location: [r.pname, r.cityname, r.adname, r.address].filter(Boolean).join(' · '),
     distance: '',
     image: r.images?.[0] || '',
-    tags: [],
+    tags: [r.level || '未定级'],
     provinceFull: r.pname || undefined,
     cityLabel: r.cityname || undefined,
     districtLabel: r.adname || undefined,
+    qualityLevel: r.level || '未定级',
     lng: typeof r.lng === 'number' ? r.lng : undefined,
     lat: typeof r.lat === 'number' ? r.lat : undefined,
   }));
@@ -474,10 +483,6 @@ export async function queryMuseums(
         item.location?.toLowerCase().includes(kw) ||
         item.tags?.some((t) => t.toLowerCase().includes(kw)),
     );
-  }
-
-  if (sortBy === '名称排序' || sortBy === '鍚嶇О鎺掑簭') {
-    results.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'));
   }
 
   return results;

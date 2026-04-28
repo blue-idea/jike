@@ -654,7 +654,8 @@ type MuseumFilterPanelProps = {
   transparent?: boolean;
 };
 
-const MUSEUM_SORT_OPTIONS = ['离我最近', '名称排序'] as const;
+type MuseumPickerType = 'province' | 'city' | 'district' | 'level';
+const MUSEUM_LEVEL_OPTIONS = ['全部', '一级', '二级', '三级', '未定级'] as const;
 
 export function MuseumFilterPanel({
   primaryColor,
@@ -668,10 +669,7 @@ export function MuseumFilterPanel({
   const [useAutoLocation, setUseAutoLocation] = useState(false);
   const [location, setLocation] = useState<LocationValue>(defaultLocation);
   const [pickerVisible, setPickerVisible] = useState(false);
-  const [pickerType, setPickerType] = useState<PickerType>('province');
-
-  // Museum specific filters
-  const [sortBy, setSortBy] = useState('离我最近');
+  const [pickerType, setPickerType] = useState<MuseumPickerType>('province');
 
   const handleRelocate = useCallback(async () => {
     setIsLocating(true);
@@ -691,7 +689,7 @@ export function MuseumFilterPanel({
     }
   }, [location.level]);
 
-  const openPicker = (type: PickerType) => {
+  const openPicker = (type: MuseumPickerType) => {
     setPickerType(type);
     setPickerVisible(true);
     setUseAutoLocation(false);
@@ -710,6 +708,8 @@ export function MuseumFilterPanel({
       setLocation((prev) => ({ ...prev, city: value, district: ALL_DISTRICTS }));
     } else if (pickerType === 'district') {
       setLocation((prev) => ({ ...prev, district: value }));
+    } else if (pickerType === 'level') {
+      setLocation((prev) => ({ ...prev, level: value }));
     }
     setLocationError(null);
     setPickerVisible(false);
@@ -727,14 +727,14 @@ export function MuseumFilterPanel({
       const list = city?.districts ?? [];
       return [ALL_DISTRICTS, ...list];
     }
-    return [];
+    return [...MUSEUM_LEVEL_OPTIONS];
   }, [location.city, location.province, pickerType]);
 
   const pickerTitle = {
     province: '选择省份',
     city: '选择城市',
     district: '选择区县',
-    level: '选择等级',
+    level: '选择场馆等级',
   }[pickerType];
 
   return (
@@ -832,25 +832,15 @@ export function MuseumFilterPanel({
           </TouchableOpacity>
         </View>
 
-        {/* Sort By */}
         <View style={museumStyles.sortRow}>
-          <Text style={museumStyles.sortLabel}>排序方式</Text>
+          <Text style={museumStyles.sortLabel}>场馆等级</Text>
           <TouchableOpacity
             style={museumStyles.sortValue}
             activeOpacity={0.7}
-            onPress={() => {
-              const idx = MUSEUM_SORT_OPTIONS.indexOf(
-                sortBy as (typeof MUSEUM_SORT_OPTIONS)[number],
-              );
-              const next =
-                MUSEUM_SORT_OPTIONS[
-                  (Math.max(0, idx) + 1) % MUSEUM_SORT_OPTIONS.length
-                ];
-              setSortBy(next);
-            }}
+            onPress={() => openPicker('level')}
           >
             <Text style={[museumStyles.sortValueText, { color: primaryColor }]}>
-              {sortBy}
+              {location.level || '全部'}
             </Text>
             <ChevronDown size={14} color={primaryColor} />
           </TouchableOpacity>
@@ -865,7 +855,7 @@ export function MuseumFilterPanel({
                 province: location.province,
                 city: location.city,
                 district: location.district,
-                sortBy,
+                level: location.level || '全部',
                 useAutoLocation,
               })
             }
@@ -909,7 +899,8 @@ export function MuseumFilterPanel({
                       styles.pickerItemText,
                       (item === location.province ||
                         item === location.city ||
-                        item === location.district) && {
+                        item === location.district ||
+                        item === location.level) && {
                         color: primaryColor,
                         fontWeight: '800',
                       },
@@ -919,7 +910,8 @@ export function MuseumFilterPanel({
                   </Text>
                   {(item === location.province ||
                     item === location.city ||
-                    item === location.district) && (
+                    item === location.district ||
+                    item === location.level) && (
                     <View
                       style={[
                         styles.activeDot,

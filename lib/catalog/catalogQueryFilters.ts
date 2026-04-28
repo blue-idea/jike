@@ -12,7 +12,7 @@ export type MuseumQueryFormState = {
   province: string;
   city: string;
   district: string;
-  sortBy: string;
+  level: string;
   useAutoLocation: boolean;
 };
 
@@ -29,6 +29,7 @@ export type HeritageQueryFormState = {
 const PLACEHOLDERS = new Set(['请选择', '璇烽€夋嫨', '???']);
 const ALL_VALUES = new Set(['全部', '鍏ㄩ儴', '??']);
 const ALL_LEVEL_VALUES = new Set(['全部等级', '鍏ㄩ儴绛夌骇']);
+const ALL_MUSEUM_LEVEL_VALUES = new Set(['全部', '鍏ㄩ儴', '??']);
 
 /** 区县：不限制（与“请选择”同为未筛选） */
 export const ALL_DISTRICTS = '全部区县';
@@ -96,6 +97,12 @@ function museumDistrictMatches(card: MuseumCardItem, district: string) {
   return card.districtLabel === district;
 }
 
+function museumLevelMatches(card: MuseumCardItem, level: string) {
+  if (!level || ALL_MUSEUM_LEVEL_VALUES.has(level)) return true;
+  const normalized = (card.qualityLevel ?? '').trim() || '未定级';
+  return normalized === level;
+}
+
 export function filterMuseumCards(
   items: MuseumCardItem[],
   f: MuseumQueryFormState,
@@ -104,29 +111,9 @@ export function filterMuseumCards(
     if (!museumProvinceMatches(card, f.province)) return false;
     if (!museumCityMatches(card, f.city)) return false;
     if (!museumDistrictMatches(card, f.district)) return false;
+    if (!museumLevelMatches(card, f.level)) return false;
     return true;
   });
-}
-
-function parseDistanceKm(distance: string): number {
-  const n = distance.replace(/,/g, '').replace(/km/gi, '').trim();
-  const v = parseFloat(n);
-  return Number.isFinite(v) ? v : Number.POSITIVE_INFINITY;
-}
-
-export function sortMuseumCards(
-  items: MuseumCardItem[],
-  sortBy: string,
-): MuseumCardItem[] {
-  const copy = [...items];
-  if (sortBy === '名称排序' || sortBy === '鍚嶇О鎺掑簭') {
-    copy.sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'));
-    return copy;
-  }
-  copy.sort(
-    (a, b) => parseDistanceKm(a.distance) - parseDistanceKm(b.distance),
-  );
-  return copy;
 }
 
 export function formatScenicResultHint(f: ScenicLocationFormState, count: number) {
@@ -150,7 +137,7 @@ export function formatMuseumResultHint(f: MuseumQueryFormState, count: number) {
   ]
     .filter(Boolean)
     .join(' · ');
-  const tags = [f.sortBy].filter(Boolean).join(' · ');
+  const tags = [f.level].filter((value) => Boolean(value) && !ALL_VALUES.has(value)).join(' · ');
   const mode = f.useAutoLocation ? '当前位置' : '手动筛选';
   return `共 ${count} 条（${mode}${loc ? ` · ${loc}` : ''}${tags ? ` · ${tags}` : ''}）`;
 }
