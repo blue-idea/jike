@@ -18,7 +18,6 @@ import { Colors } from '@/constants/Colors';
 import {
   MUSEUM_CARDS,
   SCENIC_FEATURED,
-  SCENIC_MAP_IMAGE,
   type MuseumCardItem,
   type ScenicFeature,
 } from '@/constants/CatalogData';
@@ -530,18 +529,6 @@ export function ScenicSearchContent({
           <Text style={styles.loadMoreHint}>{'\u6b63\u5728\u52a0\u8f7d\u66f4\u591a\u5185\u5bb9...'}</Text>
         ) : null}
 
-        <View style={styles.mapPromo}>
-          <View style={styles.mapPromoText}>
-            <Text style={styles.mapPromoTitle}>{'\u9057\u4ea7\u5730\u56fe'}</Text>
-            <Text style={styles.mapPromoBody}>
-              {'\u63a2\u7d22\u4f60\u5468\u8fb9\u7684\u53e4\u90fd\u8109\u7edc\uff0c\u6bcf\u4e00\u4e2a\u8857\u89d2\u90fd\u53ef\u80fd\u901a\u5f80\u4e00\u6bb5\u5343\u5e74\u6545\u4e8b\u3002'}
-            </Text>
-            <TouchableOpacity style={styles.mapButton} activeOpacity={0.9}>
-              <Text style={styles.mapButtonText}>{'\u63a2\u7d22\u5468\u8fb9'}</Text>
-            </TouchableOpacity>
-          </View>
-          <Image source={{ uri: SCENIC_MAP_IMAGE }} style={styles.mapPreview} />
-        </View>
       </View>
       {fallbackModal}
     </>
@@ -1490,43 +1477,6 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-  },
-  mapPromo: {
-    backgroundColor: '#F7F3E9',
-    borderRadius: 24,
-    padding: 16,
-    marginTop: 18,
-    gap: 14,
-  },
-  mapPromoText: {
-    gap: 10,
-  },
-  mapPromoTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: stylesVars.scenicPrimary,
-  },
-  mapPromoBody: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: Colors.textSecondary,
-  },
-  mapButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: stylesVars.scenicPrimary,
-  },
-  mapButtonText: {
-    color: Colors.white,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  mapPreview: {
-    width: '100%',
-    height: 180,
-    borderRadius: 18,
   },
   scenicFallbackWrap: {
     flex: 1,
