@@ -1,17 +1,20 @@
 /**
  * hooks/useItinerary.ts
  *
- * AI 行程生成状态管理 Hook
- * EARS-1: 支持自然语言需求提交、多日行程展示、偏好调整再生、手动增删点
- * EARS-2: 超时 T 秒中文提示 + 重试
+ * AI 行程生成状态管理 Hook（需求9）
+ * - 自然语言需求提交
+ * - 偏好调整重生
+ * - 手动增删点后重算
+ * - 超时中文提示 + 重试
  */
 import { useCallback, useState } from 'react';
 import {
   generateItinerary,
-  generateItineraryMock,
   regenerateItinerary,
+  recomputeItineraryResult,
   type AiItineraryResult,
   type ItineraryConstraint,
+  type ItineraryStop,
   type ItineraryState,
 } from '@/lib/ai/aiItineraryQueries';
 
@@ -25,13 +28,15 @@ export interface UseItineraryReturn extends ItineraryState {
   /** 重试上次生成 */
   retry: () => Promise<void>;
   /** 手动添加 POI 到行程 */
-  addStop: (dayIndex: number, stop: AiItineraryResult['days'][0]['stops'][0]) => void;
+  addStop: (dayIndex: number, stop: ItineraryStop) => void;
   /** 手动移除 POI */
   removeStop: (dayIndex: number, poiId: string) => void;
   /** 重置状态 */
   reset: () => void;
   /** 上一次使用的约束（用于重试） */
   lastConstraints: ItineraryConstraint | null;
+  /** 是否需要登录 */
+  needsLogin: boolean;
 }
 
 export function useItinerary(): UseItineraryReturn {
@@ -41,41 +46,55 @@ export function useItinerary(): UseItineraryReturn {
     errorMessage: null,
   });
   const [lastConstraints, setLastConstraints] = useState<ItineraryConstraint | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   const generate = useCallback(async (constraints: ItineraryConstraint) => {
     setState({ status: 'generating', result: null, errorMessage: null });
     setLastConstraints(constraints);
+    setNeedsLogin(false);
     try {
-      // 优先使用真实 Edge 调用，失败后降级到 Mock
-      let result: AiItineraryResult;
-      try {
-        result = await generateItinerary(constraints);
-      } catch {
-        // Edge 未部署时降级到 Mock（开发阶段）
-        result = await generateItineraryMock(constraints);
-      }
+      const result = await generateItinerary(constraints);
       setState({ status: 'success', result, errorMessage: null });
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : '行程生成失败，请稍后重试。';
-      setState({ status: 'error', result: null, errorMessage: msg });
+      const loginRequired = msg.includes('请先登录');
+      setNeedsLogin(loginRequired);
+      setState({
+        status: msg.includes('超时') ? 'timeout' : 'error',
+        result: null,
+        errorMessage: msg,
+      });
     }
   }, []);
 
   const regenerate = useCallback(
     async (newConstraints: Partial<ItineraryConstraint>) => {
-      if (!state.result) return;
+      if (!lastConstraints) return;
       setState({ status: 'generating', result: null, errorMessage: null });
+      setNeedsLogin(false);
       try {
-        const result = await regenerateItinerary(state.result, newConstraints);
+        const result = await regenerateItinerary(lastConstraints, newConstraints);
+        const mergedConstraints = {
+          ...lastConstraints,
+          ...newConstraints,
+          query: newConstraints.query ?? lastConstraints.query,
+        };
+        setLastConstraints(mergedConstraints);
         setState({ status: 'success', result, errorMessage: null });
       } catch (error) {
         const msg =
           error instanceof Error ? error.message : '行程重新生成失败，请稍后重试。';
-        setState({ status: 'error', result: null, errorMessage: msg });
+        const loginRequired = msg.includes('请先登录');
+        setNeedsLogin(loginRequired);
+        setState({
+          status: msg.includes('超时') ? 'timeout' : 'error',
+          result: null,
+          errorMessage: msg,
+        });
       }
     },
-    [state.result],
+    [lastConstraints],
   );
 
   const retry = useCallback(async () => {
@@ -84,7 +103,7 @@ export function useItinerary(): UseItineraryReturn {
   }, [lastConstraints, generate]);
 
   const addStop = useCallback(
-    (dayIndex: number, stop: AiItineraryResult['days'][0]['stops'][0]) => {
+    (dayIndex: number, stop: ItineraryStop) => {
       setState((prev) => {
         if (!prev.result) return prev;
         const newDays = [...prev.result.days];
@@ -94,9 +113,13 @@ export function useItinerary(): UseItineraryReturn {
             stops: [...newDays[dayIndex].stops, stop],
           };
         }
+        const recomputed = recomputeItineraryResult({
+          ...prev.result,
+          days: newDays,
+        });
         return {
           ...prev,
-          result: { ...prev.result!, days: newDays },
+          result: recomputed,
         };
       });
     },
@@ -113,9 +136,13 @@ export function useItinerary(): UseItineraryReturn {
           stops: newDays[dayIndex].stops.filter((s) => s.poi_id !== poiId),
         };
       }
+      const recomputed = recomputeItineraryResult({
+        ...prev.result,
+        days: newDays,
+      });
       return {
         ...prev,
-        result: { ...prev.result!, days: newDays },
+        result: recomputed,
       };
     });
   }, []);
@@ -123,6 +150,7 @@ export function useItinerary(): UseItineraryReturn {
   const reset = useCallback(() => {
     setState({ status: 'idle', result: null, errorMessage: null });
     setLastConstraints(null);
+    setNeedsLogin(false);
   }, []);
 
   return {
@@ -134,5 +162,6 @@ export function useItinerary(): UseItineraryReturn {
     removeStop,
     reset,
     lastConstraints,
+    needsLogin,
   };
 }

@@ -1,0 +1,44 @@
+# tests/maestro/ai_itinerary.yaml
+# Maestro E2E：智能行程生成与可编辑重算（任务13）
+
+appId: com.jike.app
+
+---
+- launchApp
+- waitForTimeout: 2000
+
+# 登录（示例测试账号）
+- inputText:
+    text: "test@example.com"
+    index: 0
+- inputText:
+    text: "Test123456"
+    index: 1
+- tapOn: "登录"
+- waitForTimeout: 3000
+
+# 进入路线页
+- tapOn: "路线"
+- waitForTimeout: 1500
+
+# 生成行程
+- assertVisible: "AI 智能行程"
+- inputText:
+    text: "喜欢历史，不要太累，西安两天"
+    index: 0
+- tapOn: "生成行程"
+- waitForTimeout: 8000
+
+# 验证结果可见
+- assertVisible: "共"
+- assertVisible: "Day 1"
+
+# 手动编辑与重算（删一个点，再加一个点）
+- tapOn: "加入"
+- waitForTimeout: 1000
+- tapOn:
+    text: "按偏好重生"
+- waitForTimeout: 6000
+
+# 验证重生后仍有结果
+- assertVisible: "Day 1"
