@@ -1,0 +1,49 @@
+<h2>智能行程：偏好选择项形态</h2>
+<p class="subtitle">请先确定“历史古建”这类内容是单选还是多选，这会直接影响行程约束力度。</p>
+
+<div class="cards">
+  <div class="card" data-choice="single" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>A. 单选下拉</h3>
+      <p>一次只选 1 个主题，比如“历史古建”。约束最强，结果更集中。</p>
+      <div class="mockup">
+        <div class="mockup-header">示意</div>
+        <div class="mockup-body">
+          <div class="mock-input">主题偏好：历史古建 ▼</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="multi" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B. 多选标签（推荐）</h3>
+      <p>可选 2-4 个主题，如“历史古建 + 博物馆 + 非网红”。兼顾可控与多样性。</p>
+      <div class="mockup">
+        <div class="mockup-header">示意</div>
+        <div class="mockup-body">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="mock-button">历史古建</button>
+            <button class="mock-button">博物馆</button>
+            <button class="mock-button">小众路线</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="grouped" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>C. 分组多选</h3>
+      <p>按“主题/节奏/预算”分组选择，表达力最强，但操作最复杂。</p>
+      <div class="mockup">
+        <div class="mockup-header">示意</div>
+        <div class="mockup-body">
+          <p><strong>主题</strong>：历史古建 / 博物馆</p>
+          <p><strong>节奏</strong>：轻松 / 紧凑</p>
+          <p><strong>预算</strong>：经济 / 品质</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

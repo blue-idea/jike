@@ -1,0 +1,58 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: visual-regression.spec.ts >> Visual Regression Tests - AI Screens >> AI Camera Viewfinder Screen
+- Location: tests\visual-regression.spec.ts:23:7
+
+# Error details
+
+```
+Test timeout of 30000ms exceeded.
+```
+
+```
+Error: page.waitForLoadState: Test timeout of 30000ms exceeded.
+```
+
+# Test source
+
+```ts
+  1  | import { test, expect } from '@playwright/test';
+  2  | 
+  3  | test.describe('Visual Regression Tests - AI Screens', () => {
+  4  |   test('AI Guide Detail Screen', async ({ page }) => {
+  5  |     await page.goto('/ai-guide-detail');
+  6  |     // Wait for content and images to load
+  7  |     await page.waitForLoadState('networkidle');
+  8  |     await expect(page).toHaveScreenshot('ai-guide-detail.png', {
+  9  |       fullPage: true,
+  10 |       maxDiffPixelRatio: 0.05,
+  11 |     });
+  12 |   });
+  13 | 
+  14 |   test('AI Camera Result Screen', async ({ page }) => {
+  15 |     await page.goto('/ai-camera-result');
+  16 |     await page.waitForLoadState('networkidle');
+  17 |     await expect(page).toHaveScreenshot('ai-camera-result.png', {
+  18 |       fullPage: true,
+  19 |       maxDiffPixelRatio: 0.05,
+  20 |     });
+  21 |   });
+  22 | 
+  23 |   test('AI Camera Viewfinder Screen', async ({ page }) => {
+  24 |     await page.goto('/ai-camera-viewfinder');
+> 25 |     await page.waitForLoadState('networkidle');
+     |                ^ Error: page.waitForLoadState: Test timeout of 30000ms exceeded.
+  26 |     await expect(page).toHaveScreenshot('ai-camera-viewfinder.png', {
+  27 |       fullPage: true,
+  28 |       maxDiffPixelRatio: 0.05,
+  29 |     });
+  30 |   });
+  31 | });
+  32 | 
+```

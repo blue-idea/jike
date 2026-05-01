@@ -13,6 +13,11 @@ import { Sparkles, RotateCcw } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { useItinerary } from '@/hooks/useItinerary';
 import type { ItineraryCandidatePoi, ItineraryStop } from '@/lib/ai/aiItineraryQueries';
+import {
+  composeItineraryQuery,
+  ITINERARY_THEME_OPTIONS,
+  type ItineraryThemeOption,
+} from '@/lib/ai/itineraryPromptComposer';
 import { AiItineraryDayPager } from './AiItineraryDayPager';
 
 const INTENSITY_OPTIONS: { value: 1 | 2 | 3; label: string }[] = [
@@ -58,12 +63,12 @@ export function AiItineraryPlanner() {
     needsLogin,
   } = useItinerary();
 
-  const [query, setQuery] = useState('我喜欢历史，不要太累，西安两天');
+  const [customPrompt, setCustomPrompt] = useState('想看西安文保和博物馆，尽量减少奔波。');
   const [destination, setDestination] = useState('西安');
   const [days, setDays] = useState('2');
   const [dailyHours, setDailyHours] = useState('8');
   const [intensity, setIntensity] = useState<1 | 2 | 3>(2);
-  const [themeTags, setThemeTags] = useState('历史,古建');
+  const [selectedThemeTags, setSelectedThemeTags] = useState<ItineraryThemeOption[]>([]);
 
   useEffect(() => {
     if (!needsLogin || loginAlertShown.current) return;
@@ -85,6 +90,12 @@ export function AiItineraryPlanner() {
       },
     ]);
   }, [needsLogin, router]);
+
+  const toggleThemeTag = (tag: ItineraryThemeOption) => {
+    setSelectedThemeTags((prev) =>
+      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
+    );
+  };
 
   const candidateByDay = useMemo(() => {
     if (!result?.candidate_pois || result.candidate_pois.length === 0) {
@@ -113,26 +124,44 @@ export function AiItineraryPlanner() {
     });
   }, [result]);
 
+  const composedQuery = useMemo(
+    () =>
+      composeItineraryQuery({
+        customPrompt,
+        selectedThemeTags,
+        intensity,
+        destination: destination.trim() || undefined,
+        days: Number.isFinite(Number(days)) ? Number(days) : undefined,
+        dailyHours: Number.isFinite(Number(dailyHours)) ? Number(dailyHours) : undefined,
+      }),
+    [customPrompt, days, dailyHours, destination, intensity, selectedThemeTags],
+  );
+
   const generatePayload = useMemo(
     () => ({
-      query: query.trim(),
+      query: composedQuery,
       destination: destination.trim() || undefined,
       days: Number.isFinite(Number(days)) ? Number(days) : undefined,
       dailyHours: Number.isFinite(Number(dailyHours)) ? Number(dailyHours) : undefined,
       intensity,
-      themeTags: themeTags
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean),
+      themeTags: selectedThemeTags,
     }),
-    [dailyHours, days, destination, intensity, query, themeTags],
+    [composedQuery, dailyHours, days, destination, intensity, selectedThemeTags],
   );
 
   const handleGenerate = () => {
+    if (!customPrompt.trim()) {
+      Alert.alert('请输入提示词', '请先填写自定义提示词，再生成智能行程。');
+      return;
+    }
     void generate(generatePayload);
   };
 
   const handleRegenerate = () => {
+    if (!customPrompt.trim()) {
+      Alert.alert('请输入提示词', '请先填写自定义提示词，再按偏好重生。');
+      return;
+    }
     void regenerate({
       query: generatePayload.query,
       destination: generatePayload.destination,
@@ -150,12 +179,12 @@ export function AiItineraryPlanner() {
           <Sparkles size={20} color={Colors.goldLight} />
           <Text style={styles.title}>AI 智能行程</Text>
         </View>
-        <Text style={styles.subtitle}>输入自然语言需求，生成多日草案；支持偏好重生与手动增删后重算。</Text>
+        <Text style={styles.subtitle}>结合自定义提示词与选择项生成多日草案；支持偏好重生与手动增删后重算。</Text>
 
         <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="例如：喜欢历史，不要太累，西安两天"
+          value={customPrompt}
+          onChangeText={setCustomPrompt}
+          placeholder="请描述你的需求，例如：想看唐代文保，避开高强度步行"
           placeholderTextColor={Colors.textMuted}
           style={[styles.input, styles.multiline]}
           multiline
@@ -187,6 +216,23 @@ export function AiItineraryPlanner() {
           />
         </View>
 
+        <Text style={styles.groupLabel}>偏好类型（可多选）</Text>
+        <View style={styles.themeTagsRow}>
+          {ITINERARY_THEME_OPTIONS.map((tag) => {
+            const isActive = selectedThemeTags.includes(tag);
+            return (
+              <TouchableOpacity
+                key={tag}
+                style={[styles.themeTagBtn, isActive && styles.themeTagBtnActive]}
+                onPress={() => toggleThemeTag(tag)}
+              >
+                <Text style={[styles.themeTagText, isActive && styles.themeTagTextActive]}>{tag}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.groupLabel}>出行节奏</Text>
         <View style={styles.intensityRow}>
           {INTENSITY_OPTIONS.map((item) => (
             <TouchableOpacity
@@ -200,14 +246,6 @@ export function AiItineraryPlanner() {
             </TouchableOpacity>
           ))}
         </View>
-
-        <TextInput
-          value={themeTags}
-          onChangeText={setThemeTags}
-          placeholder="主题标签，逗号分隔（如 历史,古建）"
-          placeholderTextColor={Colors.textMuted}
-          style={styles.input}
-        />
 
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -310,6 +348,36 @@ const styles = StyleSheet.create({
   intensityRow: {
     flexDirection: 'row',
     gap: 8,
+  },
+  groupLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '700',
+  },
+  themeTagsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  themeTagBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.24)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  themeTagBtnActive: {
+    borderColor: Colors.accent,
+    backgroundColor: 'rgba(200,145,74,0.26)',
+  },
+  themeTagText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.88)',
+    fontWeight: '700',
+  },
+  themeTagTextActive: {
+    color: Colors.white,
   },
   intensityBtn: {
     flex: 1,

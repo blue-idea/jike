@@ -96,7 +96,13 @@ export function AiItineraryDayPager({
   const handleMomentumEnd = (offsetX: number) => {
     if (pageWidth <= 0) return;
     const pageIndex = clamp(Math.round(offsetX / pageWidth), 0, Math.max(result.days.length - 1, 0));
-    setActiveDayIndex(pageIndex);
+    setActiveDayIndex((prev) => (prev === pageIndex ? prev : pageIndex));
+  };
+
+  const handleScroll = (offsetX: number) => {
+    if (pageWidth <= 0) return;
+    const pageIndex = clamp(Math.round(offsetX / pageWidth), 0, Math.max(result.days.length - 1, 0));
+    setActiveDayIndex((prev) => (prev === pageIndex ? prev : pageIndex));
   };
 
   return (
@@ -116,6 +122,8 @@ export function AiItineraryDayPager({
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
+          onScroll={(event) => handleScroll(event.nativeEvent.contentOffset.x)}
+          scrollEventThrottle={16}
           onMomentumScrollEnd={(event) => handleMomentumEnd(event.nativeEvent.contentOffset.x)}
         >
           {result.days.map((day, dayIndex) => {

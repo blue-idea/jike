@@ -1,4 +1,11 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  buildDays as buildPlanningDays,
+  inferPreferredPoiTypes,
+  parseDayPreferencesFromText,
+  pickSelectedCandidates as pickPlanningCandidates,
+  type DayPreferences,
+} from './planning.ts';
 
 type PoiType = 'scenic' | 'heritage' | 'museum';
 type Intensity = 1 | 2 | 3;
@@ -25,6 +32,8 @@ interface ResolvedConstraints {
   dailyHours: number;
   intensity: Intensity;
   themeTags: string[];
+  preferredPoiTypes: PoiType[];
+  dayPreferences: DayPreferences;
   mustVisitIds: string[];
   excludeIds: string[];
 }
@@ -72,6 +81,22 @@ interface ItineraryResult {
     intensity: Intensity;
     themeTags: string[];
   };
+}
+
+interface ModelItineraryStop {
+  poi_id: string;
+  notes?: string;
+}
+
+interface ModelItineraryDay {
+  day: number;
+  theme?: string;
+  stops: ModelItineraryStop[];
+}
+
+interface ModelItineraryPayload {
+  summary?: string;
+  days: ModelItineraryDay[];
 }
 
 interface EdgeError {
@@ -124,6 +149,7 @@ const CORS_HEADERS = {
 };
 
 const MODEL_TIMEOUT_MS = 60_000;
+const MODEL_CANDIDATE_LIMIT = 120;
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -384,6 +410,7 @@ async function resolveConstraints(input: ItineraryConstraintInput): Promise<Reso
     ...safeStringArray(byModel.themeTags),
     ...safeStringArray(byRule.themeTags),
   ];
+  const uniqueThemeTags = [...new Set(themeTags)].slice(0, 4);
 
   return {
     query,
@@ -391,10 +418,295 @@ async function resolveConstraints(input: ItineraryConstraintInput): Promise<Reso
     days,
     dailyHours,
     intensity,
-    themeTags: [...new Set(themeTags)].slice(0, 4),
+    themeTags: uniqueThemeTags,
+    preferredPoiTypes: inferPreferredPoiTypes(uniqueThemeTags),
+    dayPreferences: parseDayPreferencesFromText(query),
     mustVisitIds: safeStringArray(input.mustVisitIds),
     excludeIds: safeStringArray(input.excludeIds),
   };
+}
+
+function estimateStopsPerDay(dailyHours: number, intensity: Intensity): number {
+  const base = intensity === 1 ? 3 : intensity === 2 ? 4 : 5;
+  if (dailyHours <= 6) return Math.max(2, base - 1);
+  if (dailyHours >= 10) return base + 1;
+  return base;
+}
+
+function stayMinutesByType(type: PoiType, intensity: Intensity): number {
+  const base = type === 'scenic' ? 150 : type === 'museum' ? 120 : 100;
+  if (intensity === 1) return base + 20;
+  if (intensity === 3) return Math.max(60, base - 20);
+  return base;
+}
+
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h <= 0) return `${m}分钟`;
+  if (m === 0) return `${h}小时`;
+  return `${h}小时${m}分钟`;
+}
+
+function distanceSquare(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
+  const dLng = a.lng - b.lng;
+  const dLat = a.lat - b.lat;
+  return dLng * dLng + dLat * dLat;
+}
+
+function sortByNearestNeighbor(candidates: CandidatePoi[]): CandidatePoi[] {
+  if (candidates.length <= 2) return [...candidates];
+
+  const result: CandidatePoi[] = [];
+  const remaining = new Map(candidates.map((item) => [item.poi_id, item]));
+  const start = [...remaining.values()].sort((a, b) => b.score - a.score)[0];
+  if (!start) return [];
+
+  result.push(start);
+  remaining.delete(start.poi_id);
+
+  while (remaining.size > 0) {
+    const current = result[result.length - 1];
+    let next: CandidatePoi | null = null;
+    let nearest = Number.POSITIVE_INFINITY;
+
+    for (const item of remaining.values()) {
+      const dist = distanceSquare(current, item);
+      if (dist < nearest) {
+        nearest = dist;
+        next = item;
+      }
+    }
+
+    if (!next) break;
+    result.push(next);
+    remaining.delete(next.poi_id);
+  }
+
+  return result;
+}
+
+function poiTypeLabel(type: PoiType): string {
+  if (type === 'scenic') return '景区';
+  if (type === 'museum') return '博物馆';
+  return '文保';
+}
+
+function buildPriorityHints(themeTags: string[]): string[] {
+  const hints: string[] = [];
+  if (themeTags.includes('景点')) {
+    hints.push('景区优先：5A > 4A。');
+  }
+  if (themeTags.includes('博物馆')) {
+    hints.push('博物馆优先：一级博物馆 > 二级博物馆。');
+  }
+  if (themeTags.includes('文保')) {
+    hints.push('文保优先：第一批 > 第二批。');
+  }
+  return hints;
+}
+
+function buildCandidatePromptList(candidates: CandidatePoi[]): string {
+  return candidates
+    .map(
+      (item, index) =>
+        `${index + 1}. poi_id=${item.poi_id}; name=${item.poi_name}; type=${poiTypeLabel(item.poi_type)}; priority=${item.label ?? '未标注'}; score=${item.score}; lng=${item.lng}; lat=${item.lat}`,
+    )
+    .join('\n');
+}
+
+function buildModelPrompt(constraints: ResolvedConstraints, candidates: CandidatePoi[]): string {
+  const dayPreferenceLines = Object.entries(constraints.dayPreferences)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([day, types]) => `第${day}天偏好：${types.map((type) => poiTypeLabel(type)).join('、')}为主。`);
+  const priorityHints = buildPriorityHints(constraints.themeTags);
+  const perDay = estimateStopsPerDay(constraints.dailyHours, constraints.intensity);
+
+  return [
+    `用户原始需求：${constraints.query}`,
+    `目的地：${constraints.destination ?? '未指定'}`,
+    `天数：${constraints.days}天`,
+    `每日可用时长：${constraints.dailyHours}小时`,
+    `行程节奏：${constraints.intensity === 1 ? '轻松' : constraints.intensity === 2 ? '适中' : '紧凑'}`,
+    `偏好类型：${constraints.themeTags.length > 0 ? constraints.themeTags.join('、') : '未指定'}`,
+    ...priorityHints,
+    ...dayPreferenceLines,
+    `排布原则：按点位坐标就近串联，减少往返折返。`,
+    `每日日程建议点位数量约 ${perDay} 个，可上下浮动 1 个。`,
+    '你必须仅从候选点中选点，不得虚构新点位，不得使用不存在的 poi_id。',
+    '候选点如下：',
+    buildCandidatePromptList(candidates),
+  ].join('\n');
+}
+
+function normalizeModelDay(raw: unknown): ModelItineraryDay | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Partial<ModelItineraryDay>;
+  if (!Array.isArray(value.stops)) return null;
+  const stops = value.stops
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const stop = item as Partial<ModelItineraryStop>;
+      if (typeof stop.poi_id !== 'string' || stop.poi_id.trim().length === 0) return null;
+      return {
+        poi_id: stop.poi_id.trim(),
+        notes: typeof stop.notes === 'string' ? stop.notes : undefined,
+      };
+    })
+    .filter((item): item is ModelItineraryStop => Boolean(item));
+
+  if (stops.length === 0) return null;
+  return {
+    day: typeof value.day === 'number' && Number.isFinite(value.day) ? Math.floor(value.day) : 0,
+    theme: typeof value.theme === 'string' ? value.theme : undefined,
+    stops,
+  };
+}
+
+function normalizeModelItineraryPayload(raw: unknown): ModelItineraryPayload | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Partial<ModelItineraryPayload>;
+  if (!Array.isArray(value.days)) return null;
+  const days = value.days
+    .map((item) => normalizeModelDay(item))
+    .filter((item): item is ModelItineraryDay => Boolean(item));
+  if (days.length === 0) return null;
+  return {
+    summary: typeof value.summary === 'string' ? value.summary : undefined,
+    days,
+  };
+}
+
+function buildStopsFromCandidates(
+  dayCandidates: CandidatePoi[],
+  intensity: Intensity,
+): ItineraryStop[] {
+  const ordered = sortByNearestNeighbor(dayCandidates);
+  let minute = 9 * 60;
+  return ordered.map((poi) => {
+    const duration = stayMinutesByType(poi.poi_type, intensity);
+    const arrival = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+    minute += duration + 30;
+    return {
+      poi_id: poi.poi_id,
+      poi_name: poi.poi_name,
+      poi_type: poi.poi_type,
+      arrival_time: arrival,
+      duration_minutes: duration,
+      stay_duration: formatDuration(duration),
+      notes: poi.label ? `优先级：${poi.label}` : undefined,
+      lng: poi.lng,
+      lat: poi.lat,
+    };
+  });
+}
+
+function dayMatchesPreference(
+  stops: ItineraryStop[],
+  preferredTypes: PoiType[],
+): boolean {
+  if (preferredTypes.length === 0 || stops.length === 0) return true;
+  const matched = stops.filter((stop) => preferredTypes.includes(stop.poi_type)).length;
+  return matched >= Math.ceil(stops.length / 2);
+}
+
+function mapModelDaysToItineraryDays(
+  payload: ModelItineraryPayload,
+  constraints: ResolvedConstraints,
+  candidates: CandidatePoi[],
+): ItineraryDay[] | null {
+  const poiMap = new Map(candidates.map((item) => [item.poi_id, item]));
+  const used = new Set<string>();
+  const days: ItineraryDay[] = [];
+
+  for (let dayIndex = 0; dayIndex < constraints.days; dayIndex += 1) {
+    const modelDay = payload.days.find((item) => item.day === dayIndex + 1) ?? payload.days[dayIndex];
+    if (!modelDay) return null;
+
+    const dayCandidates: CandidatePoi[] = [];
+    for (const stop of modelDay.stops) {
+      const candidate = poiMap.get(stop.poi_id);
+      if (!candidate || used.has(candidate.poi_id)) continue;
+      dayCandidates.push(candidate);
+      used.add(candidate.poi_id);
+    }
+
+    if (dayCandidates.length === 0) return null;
+
+    const stops = buildStopsFromCandidates(dayCandidates, constraints.intensity);
+    const preferredTypes = constraints.dayPreferences[dayIndex + 1] ?? [];
+    if (!dayMatchesPreference(stops, preferredTypes)) {
+      return null;
+    }
+
+    days.push({
+      day: dayIndex + 1,
+      theme: modelDay.theme?.trim() || `第${dayIndex + 1}天`,
+      stops,
+    });
+  }
+
+  return days;
+}
+
+async function generateDaysByModel(
+  constraints: ResolvedConstraints,
+  candidates: CandidatePoi[],
+  apiKey: string,
+): Promise<{ days: ItineraryDay[]; summary?: string } | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), MODEL_TIMEOUT_MS);
+  const modelCandidates = candidates.slice(0, MODEL_CANDIDATE_LIMIT);
+  const system = [
+    '你是文旅行程规划助手。',
+    '你需要根据用户需求和候选点位，输出严格 JSON。',
+    'JSON 顶层字段必须且仅包含：summary, days。',
+    'days 为数组，每项包含：day(数字), theme(字符串), stops(数组)。',
+    'stops 每项必须包含：poi_id；可选 notes。',
+    '严禁输出候选列表之外的 poi_id。',
+  ].join(' ');
+
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: buildModelPrompt(constraints, modelCandidates) },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = await response.json();
+    const content = json?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      return null;
+    }
+
+    const parsed = extractJsonObject(content);
+    const payload = normalizeModelItineraryPayload(parsed);
+    if (!payload) return null;
+
+    const days = mapModelDaysToItineraryDays(payload, constraints, modelCandidates);
+    if (!days || days.length === 0) return null;
+
+    return { days, summary: payload.summary };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function containsDestination(fields: (string | null | undefined)[], destination?: string): boolean {
@@ -417,14 +729,14 @@ function scenicPriorityScore(row: ScenicRow): number {
 
 function museumPriorityScore(level: string | null): number {
   const text = level ?? '';
-  if (text.includes('一级') || text.includes('一級') || text.includes('一级馆')) return 95;
+  if (text.includes('一级') || text.includes('一級') || text.includes('一级馆')) return 100;
   if (text.includes('二级') || text.includes('二級') || text.includes('二级馆')) return 88;
   return 70;
 }
 
 function heritagePriorityScore(batch: string | null): number {
   const text = batch ?? '';
-  if (text.includes('第一批')) return 94;
+  if (text.includes('第一批')) return 100;
   if (text.includes('第二批')) return 86;
   return 72;
 }
@@ -539,206 +851,6 @@ async function fetchCandidates(
   return merged;
 }
 
-function stayMinutesByType(type: PoiType, intensity: Intensity): number {
-  const base = type === 'scenic' ? 150 : type === 'museum' ? 120 : 100;
-  if (intensity === 1) return base + 20;
-  if (intensity === 3) return Math.max(60, base - 20);
-  return base;
-}
-
-function formatDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h <= 0) return `${m}分钟`;
-  if (m === 0) return `${h}小时`;
-  return `${h}小时${m}分钟`;
-}
-
-function buildDayTheme(index: number, themeTags: string[]): string {
-  if (themeTags.length === 0) {
-    return ['历史探索', '文化沉浸', '城市漫游', '经典地标'][index % 4];
-  }
-  return `${themeTags[index % themeTags.length]}主题`;
-}
-
-function estimateStopsPerDay(dailyHours: number, intensity: Intensity): number {
-  const base = intensity === 1 ? 3 : intensity === 2 ? 4 : 5;
-  if (dailyHours <= 6) return Math.max(2, base - 1);
-  if (dailyHours >= 10) return base + 1;
-  return base;
-}
-
-function shouldEnsureScenicCoverage(constraints: ResolvedConstraints): boolean {
-  if (/(只看博物馆|纯博物馆|博物馆专场|全程博物馆|博物馆为主)/.test(constraints.query)) {
-    return false;
-  }
-  if (/(只看文保|纯文保|遗址为主|古迹为主)/.test(constraints.query)) {
-    return false;
-  }
-  if (/(城市旅游|城市游|citywalk|自由行|行程|路线|深度游|打卡|一日游|二日游|两日游|三日游|四日游|五日游)/i.test(constraints.query)) {
-    return true;
-  }
-  return !constraints.themeTags.includes('博物馆') || constraints.themeTags.length > 1;
-}
-
-function targetScenicCount(
-  scenicPoolSize: number,
-  totalNeed: number,
-  constraints: ResolvedConstraints,
-): number {
-  if (scenicPoolSize <= 0 || !shouldEnsureScenicCoverage(constraints)) {
-    return 0;
-  }
-  return Math.min(
-    scenicPoolSize,
-    Math.max(1, Math.min(constraints.days, Math.floor((totalNeed + 2) / 4))),
-  );
-}
-
-function pickSelectedCandidates(
-  candidates: CandidatePoi[],
-  constraints: ResolvedConstraints,
-): CandidatePoi[] {
-  const map = new Map(candidates.map((item) => [item.poi_id, item]));
-  const selected: CandidatePoi[] = [];
-  const used = new Set<string>();
-
-  for (const id of constraints.mustVisitIds) {
-    const hit = map.get(id);
-    if (!hit || used.has(hit.poi_id)) continue;
-    selected.push(hit);
-    used.add(hit.poi_id);
-  }
-
-  const totalNeed = constraints.days * estimateStopsPerDay(
-    constraints.dailyHours,
-    constraints.intensity,
-  );
-  for (const item of candidates) {
-    if (used.has(item.poi_id)) continue;
-    selected.push(item);
-    used.add(item.poi_id);
-    if (selected.length >= totalNeed) break;
-  }
-
-  const scenicPool = candidates.filter((item) => item.poi_type === 'scenic');
-  const scenicNeed = targetScenicCount(scenicPool.length, totalNeed, constraints);
-  let scenicCount = selected.filter((item) => item.poi_type === 'scenic').length;
-  const mustVisitSet = new Set(constraints.mustVisitIds);
-
-  if (scenicNeed > scenicCount) {
-    for (const scenic of scenicPool) {
-      if (used.has(scenic.poi_id)) continue;
-
-      const replaceIndex = selected.findLastIndex(
-        (item) => item.poi_type !== 'scenic' && !mustVisitSet.has(item.poi_id),
-      );
-
-      if (replaceIndex >= 0) {
-        used.delete(selected[replaceIndex].poi_id);
-        selected[replaceIndex] = scenic;
-        used.add(scenic.poi_id);
-        scenicCount += 1;
-      } else if (selected.length < totalNeed) {
-        selected.push(scenic);
-        used.add(scenic.poi_id);
-        scenicCount += 1;
-      }
-
-      if (scenicCount >= scenicNeed) break;
-    }
-  }
-
-  return selected.length > 0 ? selected : candidates.slice(0, 6);
-}
-
-function distanceSquare(a: { lng: number; lat: number }, b: { lng: number; lat: number }): number {
-  const dLng = a.lng - b.lng;
-  const dLat = a.lat - b.lat;
-  return dLng * dLng + dLat * dLat;
-}
-
-function sortByNearestNeighbor(candidates: CandidatePoi[]): CandidatePoi[] {
-  if (candidates.length <= 2) return [...candidates];
-
-  const result: CandidatePoi[] = [];
-  const remaining = new Map(candidates.map((item) => [item.poi_id, item]));
-  const start = [...remaining.values()].sort((a, b) => b.score - a.score)[0];
-  if (!start) return [];
-
-  result.push(start);
-  remaining.delete(start.poi_id);
-
-  while (remaining.size > 0) {
-    const current = result[result.length - 1];
-    let next: CandidatePoi | null = null;
-    let nearest = Number.POSITIVE_INFINITY;
-
-    for (const item of remaining.values()) {
-      const dist = distanceSquare(current, item);
-      if (dist < nearest) {
-        nearest = dist;
-        next = item;
-      }
-    }
-
-    if (!next) break;
-    result.push(next);
-    remaining.delete(next.poi_id);
-  }
-
-  return result;
-}
-
-function buildDays(
-  selected: CandidatePoi[],
-  constraints: ResolvedConstraints,
-): ItineraryDay[] {
-  const days: ItineraryDay[] = [];
-  const perDay = estimateStopsPerDay(constraints.dailyHours, constraints.intensity);
-  const deduped: CandidatePoi[] = [];
-  const usedPoiIds = new Set<string>();
-  for (const poi of selected) {
-    if (usedPoiIds.has(poi.poi_id)) continue;
-    deduped.push(poi);
-    usedPoiIds.add(poi.poi_id);
-  }
-  const ordered = sortByNearestNeighbor(deduped);
-
-  let cursor = 0;
-  for (let dayIndex = 0; dayIndex < constraints.days; dayIndex += 1) {
-    const pool = ordered.slice(cursor, cursor + perDay);
-    if (pool.length === 0) break;
-
-    let minute = 9 * 60;
-    const stops = pool.map((poi) => {
-      const duration = stayMinutesByType(poi.poi_type, constraints.intensity);
-      const arrival = `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-      minute += duration + 30;
-      return {
-        poi_id: poi.poi_id,
-        poi_name: poi.poi_name,
-        poi_type: poi.poi_type,
-        arrival_time: arrival,
-        duration_minutes: duration,
-        stay_duration: formatDuration(duration),
-        notes: poi.label ? `优先级：${poi.label}` : undefined,
-        lng: poi.lng,
-        lat: poi.lat,
-      };
-    });
-
-    days.push({
-      day: dayIndex + 1,
-      theme: buildDayTheme(dayIndex, constraints.themeTags),
-      stops,
-    });
-    cursor += pool.length;
-  }
-
-  return days;
-}
-
 function buildTitle(constraints: ResolvedConstraints): string {
   const destination = constraints.destination ?? '目的地';
   return `${destination} · ${constraints.days}日智能行程`;
@@ -776,15 +888,22 @@ Deno.serve(async (req: Request) => {
     const body = (await req.json()) as ItineraryRequest;
     const constraints = await resolveConstraints(body.constraints ?? {});
     const candidates = await fetchCandidates(userClient, constraints);
-    const selected = pickSelectedCandidates(candidates, constraints);
-    const days = buildDays(selected, constraints);
+    const deepSeekKey = Deno.env.get('DEEPSEEK_API_KEY');
+    const modelPlan = deepSeekKey
+      ? await generateDaysByModel(constraints, candidates, deepSeekKey)
+      : null;
+
+    const days = modelPlan?.days ?? (() => {
+      const selected = pickPlanningCandidates(candidates, constraints);
+      return buildPlanningDays(selected, constraints);
+    })();
     if (days.length === 0) {
       return errorResponse('NO_ITINERARY', '未能生成可展示行程，请调整条件后重试。', 422);
     }
 
     const result: ItineraryResult = {
       title: buildTitle(constraints),
-      summary: constraints.query,
+      summary: modelPlan?.summary?.trim() || constraints.query,
       days,
       total_pois: days.reduce((sum, day) => sum + day.stops.length, 0),
       estimated_days: days.length,
