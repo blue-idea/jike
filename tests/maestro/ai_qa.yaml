@@ -1,0 +1,38 @@
+# tests/maestro/ai_qa.yaml
+# Maestro E2E：文化知识问答入口与消息流（任务15）
+
+appId: com.jike.app
+
+---
+- launchApp
+- waitForTimeout: 2000
+
+# 登录（示例测试账号）
+- inputText:
+    text: "test@example.com"
+    index: 0
+- inputText:
+    text: "Test123456"
+    index: 1
+- tapOn: "登录"
+- waitForTimeout: 3000
+
+# 进入工具页并打开问答入口
+- tapOn: "工具"
+- waitForTimeout: 1200
+- tapOn: "文化知识问答"
+- waitForTimeout: 1200
+
+# 验证问答页面核心元素
+- assertVisible: "文化知识问答"
+- assertVisible: "AI 问答"
+- assertVisible: "发送"
+
+# 发送一个问题
+- inputText:
+    text: "中国四大石窟有哪些？"
+- tapOn: "发送"
+- waitForTimeout: 6000
+
+# 验证消息流与重试入口可见
+- assertVisible: "重试"

@@ -9,13 +9,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   sendQaQuestion,
-  sendQaQuestionMock,
   type AiQaResult,
   type QaMessage,
   type QaState,
 } from '@/lib/ai/aiQaQueries';
 
 const OFFLINE_QUEUE_KEY = '@qa_offline_queue';
+const OFFLINE_FLUSH_INTERVAL_MS = 10_000;
 
 export type { AiQaResult, QaMessage };
 
@@ -26,6 +26,8 @@ export interface UseQaReturn extends QaState {
   retry: () => Promise<void>;
   /** 重置状态 */
   reset: () => void;
+  /** 当前会话消息 */
+  messages: QaMessage[];
   /** 离线队列中的消息 */
   offlineQueue: QaMessage[];
   /** 清除离线队列 */
@@ -36,11 +38,16 @@ export interface UseQaReturn extends QaState {
   lastQuestion: string | null;
 }
 
-function isOfflineError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.startsWith('[OFFLINE]')
-  );
+function isOfflineError(error: unknown): error is Error {
+  return error instanceof Error && error.message.startsWith('[OFFLINE]');
+}
+
+function stripOfflinePrefix(message: string): string {
+  return message.replace(/^\[OFFLINE\]/, '');
+}
+
+function isTimeoutMessage(message: string): boolean {
+  return message.includes('超时');
 }
 
 export function useQa(): UseQaReturn {
@@ -49,118 +56,143 @@ export function useQa(): UseQaReturn {
     result: null,
     errorMessage: null,
   });
+  const [messages, setMessages] = useState<QaMessage[]>([]);
   const [offlineQueue, setOfflineQueue] = useState<QaMessage[]>([]);
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const historyRef = useRef<QaMessage[]>([]);
+  const flushingRef = useRef(false);
 
   // 加载离线队列
   useEffect(() => {
     AsyncStorage.getItem(OFFLINE_QUEUE_KEY).then((val) => {
-      if (val) {
-        try {
-          const queue = JSON.parse(val) as QaMessage[];
-          setOfflineQueue(queue);
-        } catch {
-          // ignore parse errors
-        }
+      if (!val) return;
+      try {
+        const queue = JSON.parse(val) as QaMessage[];
+        setOfflineQueue(queue);
+      } catch {
+        // ignore parse errors
       }
     });
   }, []);
 
-  // 持久化离线队列
   const persistQueue = useCallback((queue: QaMessage[]) => {
-    AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue)).catch(
-      () => {},
-    );
+    AsyncStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue)).catch(() => {});
     setOfflineQueue(queue);
   }, []);
 
   const ask = useCallback(async (question: string) => {
-    setLastQuestion(question);
+    const normalizedQuestion = question.trim();
+    if (!normalizedQuestion) return;
+
+    setLastQuestion(normalizedQuestion);
     setState({ status: 'sending', result: null, errorMessage: null });
 
+    const historyForRequest = historyRef.current;
     const userMsg: QaMessage = {
       id: `user_${Date.now()}`,
       role: 'user',
-      content: question,
+      content: normalizedQuestion,
       timestamp: new Date().toISOString(),
     };
-    historyRef.current = [...historyRef.current, userMsg];
+
+    const nextHistory = [...historyRef.current, userMsg];
+    historyRef.current = nextHistory;
+    setMessages(nextHistory);
 
     try {
-      let result: AiQaResult;
-      try {
-        result = await sendQaQuestion(question, historyRef.current);
-      } catch (err) {
-        if (isOfflineError(err)) {
-          // 网络不可用 → 保留用户输入到离线队列
-          const offlineMsg: QaMessage = {
-            id: `offline_${Date.now()}`,
-            role: 'user',
-            content: question,
-            timestamp: new Date().toISOString(),
-          };
-          const newQueue = [...offlineQueue, offlineMsg];
-          persistQueue(newQueue);
-          setState({
-            status: 'offline',
-            result: null,
-            errorMessage: '当前网络不可用，您的输入已保存。网络恢复后将自动重发。',
-          });
-          return;
-        }
-        throw err;
-      }
+      const result = await sendQaQuestion(normalizedQuestion, historyForRequest);
 
-      // 成功：将回答加入历史
       const assistantMsg: QaMessage = {
         id: `assistant_${Date.now()}`,
         role: 'assistant',
         content: result.answer,
         timestamp: result.generated_at,
       };
-      historyRef.current = [...historyRef.current, assistantMsg];
+      const mergedHistory = [...historyRef.current, assistantMsg];
+      historyRef.current = mergedHistory;
+      setMessages(mergedHistory);
 
       setState({ status: 'success', result, errorMessage: null });
     } catch (error) {
-      const msg =
-        error instanceof Error ? error.message : '问答生成失败，请重试。';
-      setState({ status: 'error', result: null, errorMessage: msg });
+      if (isOfflineError(error)) {
+        const offlineMsg: QaMessage = {
+          id: `offline_${Date.now()}`,
+          role: 'user',
+          content: normalizedQuestion,
+          timestamp: userMsg.timestamp,
+        };
+        const newQueue = [...offlineQueue, offlineMsg];
+        persistQueue(newQueue);
+        setState({
+          status: 'offline',
+          result: null,
+          errorMessage:
+            `${stripOfflinePrefix(error.message)}\n您的输入已保留，网络恢复后将自动重发。`,
+        });
+        return;
+      }
+
+      const msg = error instanceof Error ? error.message : '问答生成失败，请重试。';
+      setState({
+        status: isTimeoutMessage(msg) ? 'timeout' : 'error',
+        result: null,
+        errorMessage: msg,
+      });
     }
   }, [offlineQueue, persistQueue]);
 
-  /** 尝试发送离线队列中的消息 */
   const flushOfflineQueue = useCallback(async () => {
-    if (offlineQueue.length === 0) return;
-    const queue = [...offlineQueue];
-    for (const msg of queue) {
-      if (msg.role !== 'user') continue;
-      try {
-        const result = await sendQaQuestionMock(msg.content);
-        const assistantMsg: QaMessage = {
-          id: `assistant_${Date.now()}`,
-          role: 'assistant',
-          content: result.answer,
-          timestamp: result.generated_at,
-        };
-        historyRef.current = [
-          ...historyRef.current,
-          msg,
-          assistantMsg,
-        ];
-        // 从队列移除
-        const newQueue = queue.filter((m) => m.id !== msg.id);
-        persistQueue(newQueue);
-      } catch {
-        // 如果仍然失败，保留在队列中
-        break;
+    if (flushingRef.current || offlineQueue.length === 0) return;
+    flushingRef.current = true;
+
+    try {
+      let remaining = [...offlineQueue];
+
+      for (const queued of offlineQueue) {
+        if (queued.role !== 'user') continue;
+        try {
+          const historyWithoutQueued = historyRef.current.filter((msg) => msg.id !== queued.id);
+          const result = await sendQaQuestion(queued.content, historyWithoutQueued);
+          const assistantMsg: QaMessage = {
+            id: `assistant_${Date.now()}`,
+            role: 'assistant',
+            content: result.answer,
+            timestamp: result.generated_at,
+          };
+          const mergedHistory = [...historyRef.current, assistantMsg];
+          historyRef.current = mergedHistory;
+          setMessages(mergedHistory);
+          remaining = remaining.filter((msg) => msg.id !== queued.id);
+          persistQueue(remaining);
+          setState({ status: 'success', result, errorMessage: null });
+        } catch (error) {
+          if (isOfflineError(error)) {
+            setState({
+              status: 'offline',
+              result: null,
+              errorMessage: `${stripOfflinePrefix(error.message)}\n仍有离线消息待重发。`,
+            });
+          }
+          break;
+        }
       }
+    } finally {
+      flushingRef.current = false;
     }
   }, [offlineQueue, persistQueue]);
+
+  // 离线队列存在时，定时尝试自动重发
+  useEffect(() => {
+    if (offlineQueue.length === 0) return;
+    const timer = setInterval(() => {
+      void flushOfflineQueue();
+    }, OFFLINE_FLUSH_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [offlineQueue.length, flushOfflineQueue]);
 
   const retry = useCallback(async () => {
     if (!lastQuestion) return;
-    // 重新发送上次问题
     await ask(lastQuestion);
   }, [lastQuestion, ask]);
 
@@ -168,20 +200,19 @@ export function useQa(): UseQaReturn {
     setState({ status: 'idle', result: null, errorMessage: null });
     setLastQuestion(null);
     historyRef.current = [];
+    setMessages([]);
   }, []);
 
   const clearOfflineQueue = useCallback(async () => {
     persistQueue([]);
   }, [persistQueue]);
 
-  // 监听网络恢复（组件外部可通过 NetInfo 等感知并调用 flushOfflineQueue）
-  // 此处导出供外部调用
-
   return {
     ...state,
     ask,
     retry,
     reset,
+    messages,
     offlineQueue,
     clearOfflineQueue,
     lastQuestion,

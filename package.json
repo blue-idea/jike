@@ -10,6 +10,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test:ai-itinerary": "node scripts/test-ai-itinerary-planning.cjs",
+    "test:ai-chat": "node scripts/test-ai-chat.cjs",
     "data:china-regions": "node scripts/build-china-regions-from-xls.cjs",
     "data:catalog-import": "node scripts/import-catalog-from-xlsx.cjs",
     "prepare": "husky",

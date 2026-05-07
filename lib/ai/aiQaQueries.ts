@@ -4,7 +4,7 @@
  * AI 文化知识问答链路（EARS-1：文化领域回答 + 免责声明）
  * EARS-2 覆盖：离线输入保留 + 网络恢复重发，超时 T 秒中文提示 + 重试
  *
- * 调用约定：实际请求发至 Supabase Edge Functions /ai-qa，
+ * 调用约定：实际请求发至 Supabase Edge Functions /ai-chat，
  * 密钥仅存于 Edge 环境变量，客户端不持有。
  */
 import { supabase } from '@/lib/supabase';
@@ -38,25 +38,26 @@ export interface QaState {
 export const QA_DISCLAIMER =
   '以上回答由 AI 生成，仅供参考。\n如有重要用途请查阅官方权威资料。';
 
-function mapErrorToChinese(error: unknown): string {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    if (
-      msg.includes('timeout') ||
-      msg.includes('etimedout') ||
-      msg.includes('aborted')
-    ) {
-      return TIMEOUT_MESSAGE;
-    }
-    if (msg.includes('network') || msg.includes('fetch') || msg.includes('offline')) {
-      return '当前网络不可用，请检查网络连接后重试。';
-    }
-  }
-  return '问答生成失败，请稍后重试。';
+interface EdgeErrorShape {
+  code?: string;
+  message_zh?: string;
+  message?: string;
 }
 
-/** 判断是否网络错误 */
-function isNetworkError(error: unknown): boolean {
+interface EdgeResponseShape {
+  data?: unknown;
+  error?: string | EdgeErrorShape | null;
+}
+
+interface QaRequestPayload {
+  query: string;
+  messages: {
+    role: 'user' | 'assistant';
+    content: string;
+  }[];
+}
+
+function isLikelyNetworkError(error: unknown): boolean {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     return (
@@ -68,6 +69,100 @@ function isNetworkError(error: unknown): boolean {
     );
   }
   return false;
+}
+
+export function mapQaErrorToChinese(error: unknown): string {
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('请先登录') || msg.includes('401') || msg.includes('auth')) {
+      return '请先登录后再使用问答功能。';
+    }
+    if (
+      msg.includes('requested function was not found') ||
+      msg.includes('not_found') ||
+      msg.includes('http 404')
+    ) {
+      return 'AI 问答服务未部署（ai-chat）。请先在 Supabase 部署 Edge Function 后再试。';
+    }
+    if (
+      msg.includes('timeout') ||
+      msg.includes('etimedout') ||
+      msg.includes('aborted')
+    ) {
+      return TIMEOUT_MESSAGE;
+    }
+    if (isLikelyNetworkError(error)) {
+      return '当前网络不可用，请检查网络连接后重试。';
+    }
+    if (msg.includes('429') || msg.includes('rate')) {
+      return '当前请求过于频繁，请稍后重试。';
+    }
+  }
+  return '问答生成失败，请稍后重试。';
+}
+
+async function readEdgeError(response: Response): Promise<string> {
+  let body: EdgeResponseShape | null = null;
+  try {
+    body = (await response.json()) as EdgeResponseShape;
+  } catch {
+    body = null;
+  }
+
+  if (response.status === 401) {
+    return '请先登录后再使用问答功能。';
+  }
+  if (response.status === 404) {
+    return 'AI 问答服务未部署（ai-chat）。请先在 Supabase 部署 Edge Function 后再试。';
+  }
+  if (response.status === 408 || response.status === 504) {
+    return TIMEOUT_MESSAGE;
+  }
+
+  if (!body?.error) {
+    return `HTTP ${response.status}`;
+  }
+
+  if (typeof body.error === 'string') {
+    return body.error;
+  }
+
+  if (body.error.message_zh) return body.error.message_zh;
+  if (body.error.message) return body.error.message;
+  if (body.error.code) return body.error.code;
+  return `HTTP ${response.status}`;
+}
+
+function normalizeQaResult(payload: unknown): AiQaResult {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('AI 服务返回内容为空，请稍后重试。');
+  }
+
+  const raw = payload as Partial<AiQaResult>;
+  const answer = typeof raw.answer === 'string' ? raw.answer.trim() : '';
+  if (!answer) {
+    throw new Error('AI 服务未返回有效回答，请重试。');
+  }
+
+  const disclaimer =
+    typeof raw.disclaimer === 'string' && raw.disclaimer.trim().length > 0
+      ? raw.disclaimer
+      : QA_DISCLAIMER;
+
+  const sources =
+    Array.isArray(raw.sources) && raw.sources.every((item) => typeof item === 'string')
+      ? raw.sources
+      : undefined;
+
+  return {
+    answer,
+    disclaimer,
+    sources,
+    generated_at:
+      typeof raw.generated_at === 'string' && raw.generated_at.trim().length > 0
+        ? raw.generated_at
+        : new Date().toISOString(),
+  };
 }
 
 /**
@@ -88,55 +183,66 @@ export async function sendQaQuestion(
   if (!accessToken) {
     throw new Error('请先登录后再使用问答功能。');
   }
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error('未配置 Supabase 地址，无法调用 AI 问答服务。');
+  }
 
   const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    AI_TIMEOUT_SECONDS * 1000,
-  );
+  const handleAbort = () => controller.abort();
+  const timeout = setTimeout(handleAbort, AI_TIMEOUT_SECONDS * 1000);
 
-  let registered = false;
+  const payload: QaRequestPayload = {
+    query: question,
+    messages: history.map((item) => ({
+      role: item.role,
+      content: item.content,
+    })),
+  };
+
   if (abortSignal) {
-    abortSignal.addEventListener('abort', () => controller.abort());
-    registered = true;
+    abortSignal.addEventListener('abort', handleAbort);
   }
 
   try {
     const response = await fetch(
-      `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/ai-qa`,
+      `${supabaseUrl}/functions/v1/ai-chat`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({ question, history }),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       },
     );
 
-    clearTimeout(timeout);
-
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new Error(await readEdgeError(response));
     }
 
-    const json = await response.json();
-    if (json.error) {
-      throw new Error(json.error);
+    const json = (await response.json()) as EdgeResponseShape | AiQaResult;
+    if ('error' in (json as EdgeResponseShape) && (json as EdgeResponseShape).error) {
+      const err = (json as EdgeResponseShape).error;
+      if (typeof err === 'string') throw new Error(err);
+      throw new Error(err?.message_zh ?? err?.message ?? err?.code ?? '问答生成失败，请稍后重试。');
     }
 
-    return json as AiQaResult;
+    const responseData = 'data' in (json as EdgeResponseShape)
+      ? (json as EdgeResponseShape).data
+      : json;
+    return normalizeQaResult(responseData);
   } catch (error) {
-    clearTimeout(timeout);
-    // 标记网络错误，用于触发离线保留
-    if (isNetworkError(error)) {
-      (error as Error).message = `[OFFLINE]${(error as Error).message}`;
+    const message = mapQaErrorToChinese(error);
+    if (isLikelyNetworkError(error)) {
+      throw new Error(`[OFFLINE]${message}`);
     }
-    throw error;
+    throw new Error(message);
   } finally {
-    if (registered && abortSignal) {
-      abortSignal.removeEventListener('abort', () => controller.abort());
+    clearTimeout(timeout);
+    if (abortSignal) {
+      abortSignal.removeEventListener('abort', handleAbort);
     }
   }
 }

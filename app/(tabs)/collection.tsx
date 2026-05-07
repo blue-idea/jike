@@ -3,12 +3,13 @@ import {
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, StatusBar, Image,
 } from 'react-native';
+import { router } from 'expo-router';
 import { Colors } from '@/constants/Colors';
 import { FEATURED_SITES } from '@/constants/MockData';
 import { SiteListCard } from '@/components/discover/SiteListCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { BrandHeader } from '@/components/ui/BrandHeader';
-import { Heart, Bookmark, Map, Trash2, FolderOpen } from 'lucide-react-native';
+import { Heart, Bookmark, Map, Trash2, FolderOpen, MessageCircle, ChevronRight } from 'lucide-react-native';
 import { CollectionMapSection } from '@/components/collection/CollectionMapSection';
 import { HeatTrendEntryCard } from '@/components/heatmap/HeatTrendEntryCard';
 
@@ -53,6 +54,22 @@ export default function CollectionScreen() {
       >
         <CollectionMapSection onMapInteractingChange={setIsMapInteracting} />
         <HeatTrendEntryCard />
+        <TouchableOpacity
+          style={styles.qaEntryCard}
+          onPress={() => router.push('/ai-qa-chat')}
+          activeOpacity={0.86}
+        >
+          <View style={styles.qaEntryLeft}>
+            <View style={styles.qaEntryIconWrap}>
+              <MessageCircle size={16} color={Colors.white} />
+            </View>
+            <View style={styles.qaEntryCopy}>
+              <Text style={styles.qaEntryTitle}>文化知识问答</Text>
+              <Text style={styles.qaEntrySubtitle}>离线输入自动保留，恢复网络后重发</Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={Colors.primary} />
+        </TouchableOpacity>
         <View style={styles.tabContainer}>
           <View style={styles.tabBar}>
             {TABS.map(({ id, label, Icon }) => (
@@ -189,6 +206,47 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: 12,
     paddingBottom: 20,
+  },
+  qaEntryCard: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.primary + '33',
+    backgroundColor: Colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  qaEntryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  qaEntryIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+  },
+  qaEntryCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  qaEntryTitle: {
+    color: Colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  qaEntrySubtitle: {
+    color: Colors.textMuted,
+    fontSize: 12,
   },
   countRow: {
     flexDirection: 'row',

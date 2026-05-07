@@ -115,6 +115,12 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="ai-qa-chat"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="heatmap-trends"
         options={{
           href: null,
