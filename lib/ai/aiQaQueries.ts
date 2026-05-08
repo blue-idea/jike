@@ -71,6 +71,33 @@ function isLikelyNetworkError(error: unknown): boolean {
   return false;
 }
 
+function getNavigatorOnLine(): boolean | null {
+  const maybeNavigator = (globalThis as { navigator?: { onLine?: boolean } }).navigator;
+  if (typeof maybeNavigator?.onLine === 'boolean') {
+    return maybeNavigator.onLine;
+  }
+  return null;
+}
+
+function isLikelyOfflineTransportError(error: unknown): boolean {
+  if (!isLikelyNetworkError(error)) return false;
+
+  const navigatorOnLine = getNavigatorOnLine();
+  if (navigatorOnLine === false) {
+    return true;
+  }
+
+  // In web, "online + fetch failed" usually means CORS/preflight/deploy issues, not offline.
+  const hasWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const hasDocument = Object.prototype.hasOwnProperty.call(globalThis, 'document');
+  if (hasWindow && hasDocument && navigatorOnLine === true) {
+    return false;
+  }
+
+  // In native RN there is no browser preflight; transport failures are usually real network issues.
+  return true;
+}
+
 export function mapQaErrorToChinese(error: unknown): string {
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
@@ -91,8 +118,11 @@ export function mapQaErrorToChinese(error: unknown): string {
     ) {
       return TIMEOUT_MESSAGE;
     }
+    if (isLikelyOfflineTransportError(error)) {
+      return '\u5f53\u524d\u7f51\u7edc\u4e0d\u53ef\u7528\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u8fde\u63a5\u540e\u91cd\u8bd5\u3002';
+    }
     if (isLikelyNetworkError(error)) {
-      return '当前网络不可用，请检查网络连接后重试。';
+      return 'AI \u95ee\u7b54\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff08\u53ef\u80fd\u672a\u90e8\u7f72 ai-chat \u6216\u8de8\u57df\u9884\u68c0\u5931\u8d25\uff09\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002';
     }
     if (msg.includes('429') || msg.includes('rate')) {
       return '当前请求过于频繁，请稍后重试。';
@@ -235,7 +265,7 @@ export async function sendQaQuestion(
     return normalizeQaResult(responseData);
   } catch (error) {
     const message = mapQaErrorToChinese(error);
-    if (isLikelyNetworkError(error)) {
+    if (isLikelyOfflineTransportError(error)) {
       throw new Error(`[OFFLINE]${message}`);
     }
     throw new Error(message);
