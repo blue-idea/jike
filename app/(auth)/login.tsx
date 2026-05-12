@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Pressable,
+  StyleSheet,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,7 +40,7 @@ export default function LoginScreen() {
       <View style={authFormStyles.field}>
         <Text style={authFormStyles.label}>邮箱</Text>
         <TextInput
-          style={authFormStyles.input}
+          style={[authFormStyles.input, styles.inputBg]}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
@@ -52,7 +53,7 @@ export default function LoginScreen() {
       <View style={authFormStyles.field}>
         <Text style={authFormStyles.label}>密码</Text>
         <TextInput
-          style={authFormStyles.input}
+          style={[authFormStyles.input, styles.inputBg]}
           secureTextEntry
           placeholder="请输入密码"
           placeholderTextColor="#9A8A78"
@@ -88,3 +89,9 @@ export default function LoginScreen() {
     </AuthScreenShell>
   );
 }
+
+const styles = StyleSheet.create({
+  inputBg: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
+});

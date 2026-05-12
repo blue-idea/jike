@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
+  Alert,
   TouchableOpacity, StatusBar,
   type NativeScrollEvent, type NativeSyntheticEvent,
 } from 'react-native';
@@ -9,20 +10,37 @@ import { SearchBar } from '@/components/discover/SearchBar';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useCatalogLocation } from '@/contexts/CatalogLocationContext';
 import { MapPin } from 'lucide-react-native';
-import { HeritageDirectoryContent, ScenicSearchContent, MuseumDirectoryContent } from '@/components/catalog/CatalogScreens';
+import {
+  HeritageDirectoryContent,
+  ScenicSearchContent,
+  MuseumDirectoryContent,
+  type DiscoverSortMode,
+} from '@/components/catalog/CatalogScreens';
+import { useInlineAiGuideModal } from '@/hooks/useInlineAiGuideModal';
 import { GeoLocationFilter, MuseumFilterPanel, HeritageFilterPanel } from '@/components/catalog/GeoLocationFilter';
 import { queryHeritageFilterOptions, type HeritageFilterOptions } from '@/lib/catalog/supabaseCatalogQueries';
 import { ALL_DISTRICTS, type ScenicLocationFormState, type MuseumQueryFormState, type HeritageQueryFormState } from '@/lib/catalog/catalogQueryFilters';
+import {
+  getCurrentLocationWithPermission,
+  type LocationCoords,
+} from '@/lib/location/locationService';
 
 const PLACEHOLDER = '请选择';
 const ALL_LEVEL = '全部等级';
 const ALL = '全部';
+const SORT_OPTIONS: { mode: DiscoverSortMode; label: string }[] = [
+  { mode: 'default', label: '默认排序' },
+  { mode: 'distance', label: '按距离排序' },
+];
 
 export default function DiscoverScreen() {
+  const { inlineAiGuideModal, triggerInlineAiGuide } = useInlineAiGuideModal();
   const { homeCatalogLocation } = useCatalogLocation();
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'heritage' | 'scenic' | 'museum'>('scenic');
   const [reachedBottom, setReachedBottom] = useState(false);
+  const [sortMode, setSortMode] = useState<DiscoverSortMode>('default');
+  const [distanceSortCenter, setDistanceSortCenter] = useState<LocationCoords | null>(null);
   const [loadMoreSignals, setLoadMoreSignals] = useState({
     heritage: 0,
     scenic: 0,
@@ -114,6 +132,33 @@ export default function DiscoverScreen() {
     [bumpActiveTabSignal, reachedBottom],
   );
 
+  const handleSortModeChange = useCallback(
+    async (nextMode: DiscoverSortMode) => {
+      if (nextMode === 'default') {
+        setSortMode('default');
+        return;
+      }
+
+      if (distanceSortCenter) {
+        setSortMode('distance');
+        return;
+      }
+
+      const location = await getCurrentLocationWithPermission();
+      if (!location.coords) {
+        Alert.alert(
+          '无法按距离排序',
+          location.error ?? '未能获取当前位置，请检查定位权限后重试。',
+        );
+        return;
+      }
+
+      setDistanceSortCenter(location.coords);
+      setSortMode('distance');
+    },
+    [distanceSortCenter],
+  );
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
@@ -139,18 +184,20 @@ export default function DiscoverScreen() {
         <View style={styles.unifiedCard}>
           <View style={styles.tabBarContainer}>
             <View style={styles.segmentedControl}>
-              {[
-                { id: 'scenic', label: 'A级景区' },
-                { id: 'museum', label: '博物馆' },
-                { id: 'heritage', label: '重点文保' },
-              ].map((tab) => (
+                {[
+                  { id: 'scenic', label: 'A级景区' },
+                  { id: 'museum', label: '博物馆' },
+                  { id: 'heritage', label: '重点文保' },
+                ].map((tab) => (
                 <TouchableOpacity
                   key={tab.id}
                   style={[
                     styles.segmentedTab,
                     activeTab === tab.id && styles.segmentedTabActive
                   ]}
-                  onPress={() => setActiveTab(tab.id as any)}
+                  onPress={() =>
+                    setActiveTab(tab.id as 'heritage' | 'scenic' | 'museum')
+                  }
                 >
                   <Text style={[
                     styles.segmentedTabText,
@@ -195,6 +242,34 @@ export default function DiscoverScreen() {
               />
             )}
           </View>
+
+          <View style={styles.sortSection}>
+            <Text style={styles.sortSectionLabel}>排序方式</Text>
+            <View style={styles.sortPillGroup}>
+              {SORT_OPTIONS.map((option) => {
+                const active = sortMode === option.mode;
+                return (
+                  <TouchableOpacity
+                    key={option.mode}
+                    style={[styles.sortPill, active && styles.sortPillActive]}
+                    activeOpacity={0.86}
+                    onPress={() => {
+                      void handleSortModeChange(option.mode);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.sortPillText,
+                        active && styles.sortPillTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
         <View style={styles.contentContainer}>
@@ -202,6 +277,9 @@ export default function DiscoverScreen() {
             <HeritageDirectoryContent
               loadMoreSignal={loadMoreSignals.heritage}
               externalFilters={heritageFilters}
+              sortMode={sortMode}
+              distanceSortCenter={distanceSortCenter}
+              onAiGuide={triggerInlineAiGuide}
             />
           )}
           {activeTab === 'scenic' && (
@@ -209,18 +287,25 @@ export default function DiscoverScreen() {
               keyword={query}
               loadMoreSignal={loadMoreSignals.scenic}
               externalFilters={scenicFilters}
+              sortMode={sortMode}
+              distanceSortCenter={distanceSortCenter}
+              onAiGuide={triggerInlineAiGuide}
             />
           )}
           {activeTab === 'museum' && (
             <MuseumDirectoryContent
               loadMoreSignal={loadMoreSignals.museum}
               externalFilters={museumFilters}
+              sortMode={sortMode}
+              distanceSortCenter={distanceSortCenter}
+              onAiGuide={triggerInlineAiGuide}
             />
           )}
         </View>
 
         <View style={{ height: 30 }} />
       </ScrollView>
+      {inlineAiGuideModal}
     </View>
   );
 }
@@ -258,6 +343,43 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.03)',
+  },
+  sortSection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.03)',
+    paddingTop: 12,
+    gap: 8,
+  },
+  sortSectionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  sortPillGroup: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  sortPill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#E8E0D3',
+    backgroundColor: '#F7F3EA',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  sortPillActive: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(129, 74, 45, 0.12)',
+  },
+  sortPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  sortPillTextActive: {
+    color: Colors.primary,
+    fontWeight: '700',
   },
   navLocation: {
     flexDirection: 'row',

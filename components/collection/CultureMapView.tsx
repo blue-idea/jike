@@ -8,7 +8,17 @@
  * EARS-2 覆盖：网络异常时显示 MapErrorState + 支持重试
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { router } from 'expo-router';
 import { WebView } from 'react-native-webview';
 import {
   CULTURE_MAP_DEFAULT_CENTER,
@@ -18,9 +28,12 @@ import {
 import { LayerToggle } from '@/components/catalog/LayerToggle';
 import { MapLegend } from '@/components/catalog/MapLegend';
 import { MapErrorState } from '@/components/catalog/MapErrorState';
+import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
 import { type CultureMapLayer, type MapPoi } from '@/lib/catalog/supabaseCatalogQueries';
+import { addFavorite, isInFavorites, removeFavorite } from '@/lib/favorites/favoritesService';
 import { queryNearbyPoisRPC } from '@/lib/location/nearbyQueries';
 import { getCurrentLocationWithPermission, type LocationCoords } from '@/lib/location/locationService';
+import { navigateWithGaode, type RoutePoint } from '@/lib/route/routeService';
 
 export type CultureMapViewProps = {
   initialLayer?: CultureMapLayer;
@@ -30,6 +43,27 @@ export type CultureMapViewProps = {
 
 const NEARBY_RADIUS_M = 20_000;
 const MAX_NEARBY_POINTS = 220;
+
+function toMapPoiFromMessage(payload: unknown): MapPoi | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const raw = payload as Record<string, unknown>;
+  const kind = raw.kind;
+  if (kind !== 'scenic' && kind !== 'heritage' && kind !== 'museum') return null;
+  const id = typeof raw.id === 'string' ? raw.id : '';
+  const name = typeof raw.name === 'string' ? raw.name : '';
+  const lng = typeof raw.lng === 'number' ? raw.lng : NaN;
+  const lat = typeof raw.lat === 'number' ? raw.lat : NaN;
+  if (!id || !name || !Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+
+  return {
+    id,
+    name,
+    kind,
+    lng,
+    lat,
+    scenicLevel: typeof raw.scenicLevel === 'string' ? raw.scenicLevel : undefined,
+  };
+}
 
 function getWebApiKey(): string | undefined {
   const k = process.env.EXPO_PUBLIC_AMAP_KEY;
@@ -136,6 +170,21 @@ function buildMapHtml(
         postMessage({ type: 'error', msg: message || '地图加载失败，请重试' });
       }
 
+      function emitPoiPress(poi) {
+        if (!poi || !poi.id) return;
+        postMessage({
+          type: 'poi_press',
+          poi: {
+            id: String(poi.id),
+            name: String(poi.name || ''),
+            kind: poi.kind,
+            lng: Number(poi.lng),
+            lat: Number(poi.lat),
+            scenicLevel: poi.scenicLevel || null,
+          },
+        });
+      }
+
       function setInteracting(next) {
         if (interacting === next) return;
         interacting = next;
@@ -181,7 +230,7 @@ function buildMapHtml(
       }
 
       function createPoiOverlay(p) {
-        return new AMap.CircleMarker({
+        var marker = new AMap.CircleMarker({
           center: [p.lng, p.lat],
           radius: 7,
           strokeColor: '#ffffff',
@@ -192,10 +241,14 @@ function buildMapHtml(
           zIndex: 100,
           bubble: false,
         });
+        marker.on('click', function () {
+          emitPoiPress(p);
+        });
+        return marker;
       }
 
       function createLabelOverlay(p) {
-        return new AMap.Text({
+        var label = new AMap.Text({
           text: p.name,
           position: [p.lng, p.lat],
           offset: new AMap.Pixel(0, 0),
@@ -215,6 +268,10 @@ function buildMapHtml(
           zIndex: 120,
           anchor: 'center',
         });
+        label.on('click', function () {
+          emitPoiPress(p);
+        });
+        return label;
       }
 
       function clearLabels() {
@@ -440,6 +497,10 @@ export function CultureMapView({
   const [isLoading, setIsLoading] = useState(false);
   const [pois, setPois] = useState<MapPoi[]>([]);
   const [reloadSeed, setReloadSeed] = useState(0);
+  const [favoriteBusyPoiId, setFavoriteBusyPoiId] = useState<string | null>(null);
+  const [fallbackVisible, setFallbackVisible] = useState(false);
+  const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
+  const [fallbackOrigin, setFallbackOrigin] = useState<RoutePoint | null>(null);
 
   const amapKey = useMemo(() => getWebApiKey(), []);
   const mapStyleUri = useMemo(() => getMapStyleUri(), []);
@@ -576,6 +637,90 @@ export function CultureMapView({
     emitMapInteracting(false, 140);
   }, [emitMapInteracting]);
 
+  const openFallbackForDestination = useCallback(async (destination: RoutePoint) => {
+    const currentLocation = await getCurrentLocationWithPermission();
+    const origin: RoutePoint = currentLocation.coords
+      ? {
+        id: 'current-location',
+        name: '我的位置',
+        lng: currentLocation.coords.lng,
+        lat: currentLocation.coords.lat,
+      }
+      : {
+        id: `${destination.id}-origin`,
+        name: '附近位置',
+        lng: destination.lng - 0.0005,
+        lat: destination.lat - 0.0005,
+      };
+    setFallbackDestination(destination);
+    setFallbackOrigin(origin);
+    setFallbackVisible(true);
+  }, []);
+
+  const handleNavigateToPoi = useCallback(
+    async (poi: MapPoi) => {
+      const destination: RoutePoint = {
+        id: poi.id,
+        name: poi.name,
+        lng: poi.lng,
+        lat: poi.lat,
+      };
+      const strategy = await navigateWithGaode(destination, 'walk');
+      if (strategy === 'webview') {
+        await openFallbackForDestination(destination);
+      }
+    },
+    [openFallbackForDestination],
+  );
+
+  const handleToggleFavorite = useCallback(async (poi: MapPoi, currentlyFavorite: boolean) => {
+    if (favoriteBusyPoiId === poi.id) return;
+    setFavoriteBusyPoiId(poi.id);
+    try {
+      const result = currentlyFavorite
+        ? await removeFavorite(poi.id, 'favorite', poi.kind)
+        : await addFavorite(poi.id, poi.name, poi.kind, 'favorite');
+      if (!result.success) {
+        Alert.alert('操作失败', result.error ?? '请稍后重试');
+        return;
+      }
+      Alert.alert(currentlyFavorite ? '已取消收藏' : '收藏成功', poi.name);
+    } finally {
+      setFavoriteBusyPoiId((prev) => (prev === poi.id ? null : prev));
+    }
+  }, [favoriteBusyPoiId]);
+
+  const openPoiActions = useCallback(
+    async (poi: MapPoi) => {
+      const currentlyFavorite = await isInFavorites(poi.id, 'favorite', poi.kind);
+      Alert.alert('地图点位操作', poi.name, [
+        {
+          text: '导航前往',
+          onPress: () => {
+            void handleNavigateToPoi(poi);
+          },
+        },
+        {
+          text: currentlyFavorite ? '取消收藏' : '收藏',
+          onPress: () => {
+            void handleToggleFavorite(poi, currentlyFavorite);
+          },
+        },
+        {
+          text: '查看详情',
+          onPress: () => {
+            router.push({
+              pathname: '/poi/[id]',
+              params: { id: poi.id, type: poi.kind },
+            });
+          },
+        },
+        { text: '取消', style: 'cancel' },
+      ]);
+    },
+    [handleNavigateToPoi, handleToggleFavorite],
+  );
+
   const onMessage = useCallback((ev: { nativeEvent: { data: string } }) => {
     try {
       const data = JSON.parse(ev.nativeEvent.data);
@@ -593,10 +738,16 @@ export function CultureMapView({
           emitMapInteracting(false, 120);
         }
       }
+      if (data?.type === 'poi_press') {
+        const poi = toMapPoiFromMessage(data.poi);
+        if (!poi) return;
+        emitMapInteracting(false);
+        void openPoiActions(poi);
+      }
     } catch {
       /* ignore */
     }
-  }, [emitMapInteracting]);
+  }, [emitMapInteracting, openPoiActions]);
 
   const onError = useCallback(() => {
     // EARS-2: WebView 加载失败 → 显示错误态
@@ -694,6 +845,28 @@ export function CultureMapView({
           </>
         )}
       </View>
+      <Modal
+        visible={fallbackVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setFallbackVisible(false)}
+      >
+        <SafeAreaView style={styles.fallbackWrap}>
+          <View style={styles.fallbackHeader}>
+            <Text style={styles.fallbackTitle}>应用内导航降级</Text>
+            <TouchableOpacity onPress={() => setFallbackVisible(false)}>
+              <Text style={styles.fallbackCloseText}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+          {fallbackDestination ? (
+            <RouteWebViewFallback
+              origin={fallbackOrigin ?? fallbackDestination}
+              destination={fallbackDestination}
+              mode="walk"
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -763,5 +936,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2E251A',
     marginTop: -1,
+  },
+  fallbackWrap: {
+    flex: 1,
+    backgroundColor: '#F7F3EC',
+  },
+  fallbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(120,103,81,0.18)',
+  },
+  fallbackTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2E251A',
+  },
+  fallbackCloseText: {
+    fontSize: 14,
+    color: '#C8914A',
+    fontWeight: '600',
   },
 });

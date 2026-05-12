@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   ActivityIndicator,
   Image,
   RefreshControl,
@@ -17,9 +18,15 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, MapPin, Clock, Star } from 'lucide-react-native';
+import { ArrowLeft, MapPin, Clock, Star, Heart, Bookmark, Map } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { queryPoiDetail, queryPoiVersion, type PoiDetail, type PoiType } from '@/lib/poi/poiQueries';
+import {
+  addFavorite,
+  getFavoriteKind,
+  removeFavorite,
+  type FavoriteType,
+} from '@/lib/favorites/favoritesService';
 
 const POI_TYPE_LABELS: Record<PoiType, string> = {
   scenic: 'A级景区',
@@ -178,6 +185,8 @@ export default function PoiDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cachedVersion, setCachedVersion] = useState<number | null>(null);
+  const [favoriteKind, setFavoriteKind] = useState<FavoriteType | null>(null);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -195,9 +204,12 @@ export default function PoiDetailScreen() {
         const data = await queryPoiDetail(id, type);
         if (!data) {
           setError('未找到该 POI 信息');
+          setFavoriteKind(null);
         } else {
           setDetail(data);
           setCachedVersion((data as { data_version?: number }).data_version ?? null);
+          const currentFavoriteKind = await getFavoriteKind(id, type);
+          setFavoriteKind(currentFavoriteKind);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : '加载失败');
@@ -216,6 +228,39 @@ export default function PoiDetailScreen() {
   const onRefresh = useCallback(async () => {
     await load(true);
   }, [load]);
+
+  const markFavoriteKind = useCallback(
+    async (kind: FavoriteType) => {
+      if (!detail || favoriteBusy) return;
+      setFavoriteBusy(true);
+      try {
+        const result = await addFavorite(detail.id, detail.name, detail.poi_type, kind);
+        if (!result.success) {
+          Alert.alert('操作失败', result.error ?? '请稍后重试');
+          return;
+        }
+        setFavoriteKind(kind);
+      } finally {
+        setFavoriteBusy(false);
+      }
+    },
+    [detail, favoriteBusy],
+  );
+
+  const clearFavoriteKind = useCallback(async () => {
+    if (!detail || !favoriteKind || favoriteBusy) return;
+    setFavoriteBusy(true);
+    try {
+      const result = await removeFavorite(detail.id, favoriteKind, detail.poi_type);
+      if (!result.success) {
+        Alert.alert('取消标记失败', result.error ?? '请稍后重试');
+        return;
+      }
+      setFavoriteKind(null);
+    } finally {
+      setFavoriteBusy(false);
+    }
+  }, [detail, favoriteBusy, favoriteKind]);
 
   if (loading) {
     return (
@@ -273,6 +318,55 @@ export default function PoiDetailScreen() {
           <View style={styles.typeTag}>
             <Text style={styles.typeTagText}>{POI_TYPE_LABELS[detail.poi_type]}</Text>
           </View>
+          <View style={styles.favoriteActionsRow}>
+            <TouchableOpacity
+              style={[styles.favoriteActionBtn, favoriteKind === 'favorite' && styles.favoriteActionBtnActive]}
+              onPress={() => {
+                void markFavoriteKind('favorite');
+              }}
+              disabled={favoriteBusy}
+            >
+              <Heart size={14} color={favoriteKind === 'favorite' ? Colors.white : Colors.primary} />
+              <Text style={[styles.favoriteActionText, favoriteKind === 'favorite' && styles.favoriteActionTextActive]}>
+                收藏
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.favoriteActionBtn, favoriteKind === 'want_to_go' && styles.favoriteActionBtnActive]}
+              onPress={() => {
+                void markFavoriteKind('want_to_go');
+              }}
+              disabled={favoriteBusy}
+            >
+              <Bookmark size={14} color={favoriteKind === 'want_to_go' ? Colors.white : Colors.primary} />
+              <Text style={[styles.favoriteActionText, favoriteKind === 'want_to_go' && styles.favoriteActionTextActive]}>
+                想去
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.favoriteActionBtn, favoriteKind === 'visited' && styles.favoriteActionBtnActive]}
+              onPress={() => {
+                void markFavoriteKind('visited');
+              }}
+              disabled={favoriteBusy}
+            >
+              <Map size={14} color={favoriteKind === 'visited' ? Colors.white : Colors.primary} />
+              <Text style={[styles.favoriteActionText, favoriteKind === 'visited' && styles.favoriteActionTextActive]}>
+                去过
+              </Text>
+            </TouchableOpacity>
+          </View>
+          {favoriteKind ? (
+            <TouchableOpacity
+              style={styles.clearFavoriteBtn}
+              onPress={() => {
+                void clearFavoriteKind();
+              }}
+              disabled={favoriteBusy}
+            >
+              <Text style={styles.clearFavoriteBtnText}>取消当前标记</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* 类型特有详情 */}
@@ -311,8 +405,9 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0,0,0,0.06)',
+    gap: 10,
   },
-  poiName: { fontSize: 22, fontWeight: '800', color: Colors.text, marginBottom: 10 },
+  poiName: { fontSize: 22, fontWeight: '800', color: Colors.text },
   typeTag: {
     alignSelf: 'flex-start',
     backgroundColor: Colors.primary + '18',
@@ -321,6 +416,45 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   typeTagText: { fontSize: 12, fontWeight: '700', color: Colors.primary },
+  favoriteActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  favoriteActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: Colors.primary + '33',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: Colors.card,
+  },
+  favoriteActionBtnActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  favoriteActionText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  favoriteActionTextActive: {
+    color: Colors.white,
+  },
+  clearFavoriteBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.backgroundAlt,
+  },
+  clearFavoriteBtnText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
   section: { padding: 20, gap: 12 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },

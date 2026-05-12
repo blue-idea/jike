@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { MapPin, Navigation, CircleCheck as CheckCircle } from 'lucide-react-native';
+import { Heart, MapPin, Navigation, CircleCheck as CheckCircle, Sparkles } from 'lucide-react-native';
 
 interface SiteCardProps {
   name: string;
@@ -18,6 +18,9 @@ interface SiteCardProps {
   level?: string;
   onPress?: () => void;
   onNavigate?: () => void;
+  onAiGuide?: () => void;
+  isFavorite?: boolean;
+  onFavorite?: () => void;
 }
 
 export function SiteCard({
@@ -34,6 +37,9 @@ export function SiteCard({
   level,
   onPress,
   onNavigate,
+  onAiGuide,
+  isFavorite = false,
+  onFavorite,
 }: SiteCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.9}>
@@ -48,16 +54,30 @@ export function SiteCard({
           style={styles.imageGradient}
         />
         {isStamped && (
-          <View style={styles.stampedBadge}>
+          <View
+            style={[
+              styles.stampedBadge,
+              onAiGuide ? styles.stampedBadgeWhenAi : styles.stampedBadgeSolo,
+            ]}
+          >
             <CheckCircle size={13} color={Colors.jade} fill={Colors.jade} />
             <Text style={styles.stampedText}>已打卡</Text>
           </View>
         )}
-        {level && (
+        {onAiGuide ? (
+          <TouchableOpacity
+            style={styles.aiGuideImageBtn}
+            onPress={onAiGuide}
+            activeOpacity={0.85}
+          >
+            <Sparkles size={12} color={Colors.white} strokeWidth={2.2} />
+            <Text style={styles.aiGuideImageBtnText}>AI导游</Text>
+          </TouchableOpacity>
+        ) : level ? (
           <View style={styles.levelBadge}>
             <Text style={styles.levelText}>{level}</Text>
           </View>
-        )}
+        ) : null}
         <View style={styles.dynastyBadge}>
           <Text style={styles.dynastyText}>{dynasty}</Text>
         </View>
@@ -75,17 +95,33 @@ export function SiteCard({
         </View>
         <View style={styles.bottomRow}>
           <View style={styles.tagRow}>
-            {tags.slice(0, 2).map((tag) => (
+            {onAiGuide && level ? (
+              <View style={[styles.tag, styles.levelTag]}>
+                <Text style={styles.levelTagText}>{level}</Text>
+              </View>
+            ) : null}
+            {tags.slice(0, onAiGuide && level ? 1 : 2).map((tag) => (
               <View key={tag} style={styles.tag}>
                 <Text style={styles.tagText}>{tag}</Text>
               </View>
             ))}
           </View>
-          {onNavigate ? (
-            <TouchableOpacity style={styles.navBtn} onPress={onNavigate} activeOpacity={0.85}>
-              <Navigation size={12} color={Colors.primary} />
-            </TouchableOpacity>
-          ) : null}
+          <View style={styles.actionRow}>
+            {onFavorite ? (
+              <TouchableOpacity style={styles.navBtn} onPress={onFavorite} activeOpacity={0.85}>
+                <Heart
+                  size={12}
+                  color={isFavorite ? Colors.seal : Colors.primary}
+                  fill={isFavorite ? Colors.seal : 'transparent'}
+                />
+              </TouchableOpacity>
+            ) : null}
+            {onNavigate ? (
+              <TouchableOpacity style={styles.navBtn} onPress={onNavigate} activeOpacity={0.85}>
+                <Navigation size={12} color={Colors.primary} />
+              </TouchableOpacity>
+            ) : null}
+          </View>
         </View>
         {distance && <Text style={styles.distance}>{distance}</Text>}
       </View>
@@ -123,7 +159,6 @@ const styles = StyleSheet.create({
   stampedBadge: {
     position: 'absolute',
     top: 10,
-    right: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -132,10 +167,34 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+  stampedBadgeWhenAi: {
+    left: 10,
+  },
+  stampedBadgeSolo: {
+    right: 10,
+  },
   stampedText: {
     fontSize: 10,
     color: Colors.jade,
     fontWeight: '700',
+  },
+  aiGuideImageBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  aiGuideImageBtnText: {
+    fontSize: 10,
+    color: Colors.white,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   levelBadge: {
     position: 'absolute',
@@ -147,6 +206,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   levelText: {
+    fontSize: 10,
+    color: Colors.white,
+    fontWeight: '700',
+  },
+  levelTag: {
+    backgroundColor: Colors.accent,
+  },
+  levelTagText: {
     fontSize: 10,
     color: Colors.white,
     fontWeight: '700',
@@ -209,7 +276,11 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontWeight: '500',
   },
-
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   distance: {
     fontSize: 11,
     color: Colors.accent,

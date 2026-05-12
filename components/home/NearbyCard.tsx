@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/Colors';
-import { MapPin, Navigation } from 'lucide-react-native';
+import { Heart, MapPin, Navigation, Sparkles, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface NearbyCardProps {
   name: string;
@@ -13,10 +13,20 @@ interface NearbyCardProps {
   isFree: boolean;
   onPress?: () => void;
   onNavigate?: () => void;
+  onAiGuide?: () => void;
+  onCheckIn?: () => void;
+  checkInBusy?: boolean;
+  isCheckedIn?: boolean;
+  isFavorite?: boolean;
+  onFavorite?: () => void;
 }
 
 export function NearbyCard({
-  name, type, dynasty, distance, isOpen, image, isFree, onPress, onNavigate,
+  name, type, dynasty, distance, isOpen, image, isFree, onPress, onNavigate, onAiGuide, onCheckIn,
+  checkInBusy = false,
+  isCheckedIn = false,
+  isFavorite = false,
+  onFavorite,
 }: NearbyCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.88}>
@@ -24,7 +34,22 @@ export function NearbyCard({
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.name} numberOfLines={1}>{name}</Text>
-          <View style={[styles.statusDot, { backgroundColor: isOpen ? Colors.jade : Colors.textMuted }]} />
+          {isCheckedIn ? (
+            <View style={styles.headerCheckedIn}>
+              <CheckCircle size={10} color={Colors.jade} />
+              <Text style={styles.headerCheckInText}>已打卡</Text>
+            </View>
+          ) : onCheckIn ? (
+            <TouchableOpacity
+              style={[styles.headerCheckInBtn, checkInBusy && styles.checkInBtnDisabled]}
+              onPress={onCheckIn}
+              disabled={checkInBusy}
+            >
+              <Text style={styles.headerCheckInText}>{checkInBusy ? '打卡中' : '打卡'}</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.statusDot, { backgroundColor: isOpen ? Colors.jade : Colors.textMuted }]} />
+          )}
         </View>
         <Text style={styles.type}>{type} · {dynasty}</Text>
         <View style={styles.footer}>
@@ -38,6 +63,20 @@ export function NearbyCard({
                 <Text style={styles.freeText}>免费</Text>
               </View>
             )}
+            {onAiGuide ? (
+              <TouchableOpacity style={styles.aiBtn} onPress={onAiGuide}>
+                <Sparkles size={12} color={Colors.primary} />
+              </TouchableOpacity>
+            ) : null}
+            {onFavorite ? (
+              <TouchableOpacity style={styles.aiBtn} onPress={onFavorite}>
+                <Heart
+                  size={12}
+                  color={isFavorite ? Colors.seal : Colors.primary}
+                  fill={isFavorite ? Colors.seal : 'transparent'}
+                />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity style={styles.navBtn} onPress={onNavigate}>
               <Navigation size={13} color={Colors.primary} />
             </TouchableOpacity>
@@ -113,6 +152,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+  headerCheckInBtn: {
+    backgroundColor: Colors.primary + '18',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: Colors.primary + '30',
+    marginLeft: 6,
+  },
+  checkInBtnDisabled: {
+    opacity: 0.65,
+  },
+  headerCheckedIn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.jade + '18',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+  headerCheckInText: {
+    fontSize: 10,
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  checkedInText: {
+    fontSize: 10,
+    color: Colors.jade,
+    fontWeight: '700',
+  },
   freeBadge: {
     backgroundColor: Colors.jade + '22',
     paddingHorizontal: 7,
@@ -123,6 +194,16 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.jade,
     fontWeight: '700',
+  },
+  aiBtn: {
+    width: 30,
+    height: 30,
+    backgroundColor: Colors.primary + '16',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: Colors.primary + '2f',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navBtn: {
     width: 30,

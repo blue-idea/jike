@@ -1,13 +1,12 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
-    "slug": "bolt-expo-nativewind",
+    "name": "集刻",
+    "slug": "jike",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/branding/jike_logo_option_5_landscape_v2_1777199172924.png",
     "scheme": "jike",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
     },
@@ -23,7 +22,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "允许“迹刻”访问你的位置，用于推荐附近文化点位与距离排序。"
+          "locationWhenInUsePermission": "允许“集刻”访问你的位置，用于推荐附近文化点位与距离排序。"
         }
       ]
     ],
@@ -31,7 +30,7 @@
       "typedRoutes": true
     },
     "android": {
-      "package": "com.manbudezhu.boltexponativewind"
+      "package": "com.manbudezhu.jike"
     }
   }
 }

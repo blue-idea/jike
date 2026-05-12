@@ -136,6 +136,48 @@ function formatStayDuration(minutes: number): string {
   return `${hours}小时${remain}分钟`;
 }
 
+function buildPoiKey(poiType: string, poiId: string): string {
+  return `${poiType}:${poiId}`;
+}
+
+function dedupeItineraryDays(days: ItineraryDay[]): ItineraryDay[] {
+  const seen = new Set<string>();
+  const deduped: ItineraryDay[] = [];
+
+  for (const day of days) {
+    const stops: ItineraryStop[] = [];
+    for (const stop of day.stops) {
+      const key = buildPoiKey(stop.poi_type, stop.poi_id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      stops.push(stop);
+    }
+
+    if (stops.length === 0) continue;
+    deduped.push({
+      ...day,
+      day: deduped.length + 1,
+      stops,
+    });
+  }
+
+  return deduped;
+}
+
+function dedupeCandidatePois(candidates: ItineraryCandidatePoi[]): ItineraryCandidatePoi[] {
+  const seen = new Set<string>();
+  const deduped: ItineraryCandidatePoi[] = [];
+
+  for (const item of candidates) {
+    const key = buildPoiKey(item.poi_type, item.poi_id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return deduped;
+}
+
 function normalizeStop(raw: unknown): ItineraryStop | null {
   if (!raw || typeof raw !== 'object') return null;
   const value = raw as Partial<ItineraryStop>;
@@ -214,19 +256,22 @@ function normalizeItineraryResult(payload: unknown): AiItineraryResult {
   }
 
   const value = payload as Partial<AiItineraryResult>;
-  const days = Array.isArray(value.days)
+  const normalizedDays = Array.isArray(value.days)
     ? value.days.map((day, index) => normalizeDay(day, index)).filter((day): day is ItineraryDay => Boolean(day))
     : [];
+  const days = dedupeItineraryDays(normalizedDays);
 
   if (days.length === 0) {
     throw new Error('行程服务未返回可展示的行程，请重试。');
   }
 
-  const candidatePois = Array.isArray(value.candidate_pois)
-    ? value.candidate_pois
-        .map((item) => normalizeCandidate(item))
-        .filter((item): item is ItineraryCandidatePoi => Boolean(item))
-    : [];
+  const candidatePois = dedupeCandidatePois(
+    Array.isArray(value.candidate_pois)
+      ? value.candidate_pois
+          .map((item) => normalizeCandidate(item))
+          .filter((item): item is ItineraryCandidatePoi => Boolean(item))
+      : [],
+  );
 
   const totalPois = days.reduce((sum, day) => sum + day.stops.length, 0);
 
@@ -517,7 +562,8 @@ function simpleDistance(lat1: number, lng1: number, lat2: number, lng2: number):
 }
 
 export function recomputeItineraryResult(result: AiItineraryResult): AiItineraryResult {
-  const days = result.days.map((day) => ({
+  const dedupedDays = dedupeItineraryDays(result.days);
+  const days = dedupedDays.map((day) => ({
     ...day,
     stops: recomputeDayStops(day.stops),
   }));

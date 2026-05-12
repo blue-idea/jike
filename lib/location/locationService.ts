@@ -12,7 +12,7 @@ type ExpoLocationModule = {
   requestForegroundPermissionsAsync: () => Promise<{ status: string }>;
   getForegroundPermissionsAsync: () => Promise<{ status: string }>;
   getCurrentPositionAsync: (opts: { accuracy: number }) => Promise<{
-    coords: { longitude: number; latitude: number };
+    coords: { longitude: number; latitude: number; accuracy?: number | null };
   }>;
   reverseGeocodeAsync?: (coords: {
     longitude: number;
@@ -29,18 +29,17 @@ type ExpoLocationModule = {
 };
 
 // expo-location 动态导入（允许项目未安装时开发预览）
-let _ExpoLocation: ExpoLocationModule | null = null;
+let expoLocationModule: ExpoLocationModule | null = null;
 async function loadLocation(): Promise<ExpoLocationModule | null> {
-  if (_ExpoLocation === null) {
+  if (expoLocationModule === null) {
     try {
-       
       const mod = require('expo-location') as ExpoLocationModule;
-      _ExpoLocation = mod;
+      expoLocationModule = mod;
     } catch {
-      _ExpoLocation = null;
+      expoLocationModule = null;
     }
   }
-  return _ExpoLocation;
+  return expoLocationModule;
 }
 
 export type LocationStatus =
@@ -59,6 +58,7 @@ export interface LocationCoords {
 export interface LocationResult {
   status: LocationStatus;
   coords: LocationCoords | null;
+  accuracy: number | null;
   error?: string;
 }
 
@@ -123,6 +123,7 @@ async function getApproxLocationByAmapIp(): Promise<LocationResult | null> {
     return {
       status: 'granted',
       coords,
+      accuracy: null,
       error: '当前设备缺少 Google Play 服务，已降级为高德 IP 定位（城市级精度）。',
     };
   } catch {
@@ -142,6 +143,7 @@ function getWebPosition(): Promise<LocationResult> {
       resolve({
         status: 'unavailable',
         coords: null,
+        accuracy: null,
         error: '当前环境不支持地理定位',
       });
       return;
@@ -155,16 +157,21 @@ function getWebPosition(): Promise<LocationResult> {
             lng: position.coords.longitude,
             lat: position.coords.latitude,
           },
+          accuracy:
+            typeof position.coords.accuracy === 'number' && Number.isFinite(position.coords.accuracy)
+              ? position.coords.accuracy
+              : null,
         });
       },
       (error) => {
         if (error.code === 1) {
-          resolve({ status: 'denied', coords: null, error: '定位权限未授权' });
+          resolve({ status: 'denied', coords: null, accuracy: null, error: '定位权限未授权' });
           return;
         }
         resolve({
           status: 'unavailable',
           coords: null,
+          accuracy: null,
           error: error.message || '无法获取位置',
         });
       },
@@ -219,13 +226,13 @@ export async function requestLocationPermission(): Promise<LocationStatus> {
     return webResult.status;
   }
 
-  const ExpoLocation = await loadLocation();
-  if (!ExpoLocation) {
+  const expoLocation = await loadLocation();
+  if (!expoLocation) {
     return 'unavailable';
   }
 
   try {
-    const { status } = await ExpoLocation.requestForegroundPermissionsAsync();
+    const { status } = await expoLocation.requestForegroundPermissionsAsync();
     return mapPermissionStatus(status);
   } catch {
     return 'unavailable';
@@ -238,30 +245,35 @@ export async function getCurrentLocation(): Promise<LocationResult> {
     return getWebPosition();
   }
 
-  const ExpoLocation = await loadLocation();
-  if (!ExpoLocation) {
-    return { status: 'unavailable', coords: null, error: 'expo-location 未安装' };
+  const expoLocation = await loadLocation();
+  if (!expoLocation) {
+    return { status: 'unavailable', coords: null, accuracy: null, error: 'expo-location 未安装' };
   }
 
   try {
-    const { status } = await ExpoLocation.getForegroundPermissionsAsync();
+    const { status } = await expoLocation.getForegroundPermissionsAsync();
     if (status !== 'granted') {
       return {
         status: mapPermissionStatus(status),
         coords: null,
+        accuracy: null,
         error: '定位权限未授权',
       };
     }
 
-    const location = await ExpoLocation.getCurrentPositionAsync({
-      accuracy: ExpoLocation.Accuracy.Balanced,
+    const location = await expoLocation.getCurrentPositionAsync({
+      accuracy: expoLocation.Accuracy.Balanced,
     });
     if (!location) {
-      return { status: 'unavailable', coords: null, error: '无法获取位置' };
+      return { status: 'unavailable', coords: null, accuracy: null, error: '无法获取位置' };
     }
     return {
       status: 'granted',
       coords: { lng: location.coords.longitude, lat: location.coords.latitude },
+      accuracy:
+        typeof location.coords.accuracy === 'number' && Number.isFinite(location.coords.accuracy)
+          ? location.coords.accuracy
+          : null,
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : '位置获取失败';
@@ -271,6 +283,7 @@ export async function getCurrentLocation(): Promise<LocationResult> {
       return {
         status: 'unavailable',
         coords: null,
+        accuracy: null,
         error:
           '当前设备缺少 Google Play 服务，且高德定位兜底不可用。请配置 EXPO_PUBLIC_AMAP_WEB_SERVICE_KEY（高德 Web 服务 Key）或改用手动筛选。',
       };
@@ -278,6 +291,7 @@ export async function getCurrentLocation(): Promise<LocationResult> {
     return {
       status: 'unavailable',
       coords: null,
+      accuracy: null,
       error: message,
     };
   }
@@ -299,6 +313,7 @@ export async function getCurrentLocationWithPermission(): Promise<LocationResult
     return {
       status: permission,
       coords: null,
+      accuracy: null,
       error: '定位权限未授权',
     };
   }
@@ -310,10 +325,10 @@ export async function getCurrentLocationWithPermission(): Promise<LocationResult
 export async function reverseGeocodeLocation(
   coords: LocationCoords,
 ): Promise<LocationAddress | null> {
-  const ExpoLocation = await loadLocation();
-  if (ExpoLocation?.reverseGeocodeAsync && Platform.OS !== 'web') {
+  const expoLocation = await loadLocation();
+  if (expoLocation?.reverseGeocodeAsync && Platform.OS !== 'web') {
     try {
-      const result = await ExpoLocation.reverseGeocodeAsync({
+      const result = await expoLocation.reverseGeocodeAsync({
         longitude: coords.lng,
         latitude: coords.lat,
       });
@@ -341,16 +356,16 @@ export function calcDistance(
   lat2: number,
   lng2: number,
 ): number {
-  const R = 6371000;
-  const φ1 = (lat1 * Math.PI) / 180;
-  const φ2 = (lat2 * Math.PI) / 180;
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-  const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+  const radius = 6371000;
+  const lat1Rad = (lat1 * Math.PI) / 180;
+  const lat2Rad = (lat2 * Math.PI) / 180;
+  const deltaLat = ((lat2 - lat1) * Math.PI) / 180;
+  const deltaLng = ((lng2 - lng1) * Math.PI) / 180;
   const a =
-    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1Rad) * Math.cos(lat2Rad) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  return radius * c;
 }
 
 /** 格式化距离为中文显示 */

@@ -1,7 +1,14 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, SafeAreaView,
-  TouchableOpacity, StatusBar, Modal,
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  StatusBar,
+  Modal,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,28 +31,134 @@ import {
   normalizeCatalogLocation,
   useCatalogLocation,
 } from '@/contexts/CatalogLocationContext';
-import { MapPin, Sparkles, Mic } from 'lucide-react-native';
+import { MapPin, Mic, Sparkles } from 'lucide-react-native';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useNearbyPois } from '@/hooks/useNearbyPois';
 import { navigateWithGaode, type RoutePoint } from '@/lib/route/routeService';
 import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
+import {
+  bannerMetaForFeaturedSite,
+  bannerMetaForNearbyPoi,
+  type FeaturedSiteUnion,
+} from '@/lib/ai/inlineAiGuideBannerMeta';
+import { useInlineAiGuideModal } from '@/hooks/useInlineAiGuideModal';
+import { checkInToPoi } from '@/lib/checkin/checkinService';
+import {
+  addFavorite,
+  isInFavorites,
+  removeFavorite,
+  type FavoritePoiSnapshot,
+} from '@/lib/favorites/favoritesService';
+import type { PoiType } from '@/lib/poi/poiQueries';
 
 export default function HomeScreen() {
   const { setHomeCatalogLocation } = useCatalogLocation();
+  const { inlineAiGuideModal, triggerInlineAiGuide } = useInlineAiGuideModal();
   const [location, setLocation] = useState('定位中...');
   const [featuredScenic, setFeaturedScenic] = useState<AmapNearbyScenicItem[]>([]);
   const [featuredScenicLoading, setFeaturedScenicLoading] = useState(false);
   const [featuredScenicError, setFeaturedScenicError] = useState<string | null>(null);
   const [fallbackVisible, setFallbackVisible] = useState(false);
   const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
+  const [checkInBusyPoiId, setCheckInBusyPoiId] = useState<string | null>(null);
+  const [checkedInPoiIds, setCheckedInPoiIds] = useState<string[]>([]);
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
+  const [favoriteBusyKeys, setFavoriteBusyKeys] = useState<Set<string>>(new Set());
+
   const {
     pois: nearbyPois,
     loading: nearbyLoading,
     error: nearbyError,
     locationCoords,
+    locationAccuracy,
     refresh: refreshNearby,
-  } =
-    useNearbyPois({ radiusM: 10000 });
+  } = useNearbyPois({ radiusM: 10000 });
+
+  const displayedFeaturedSites = useMemo(
+    () => (featuredScenic.length > 0 ? featuredScenic : FEATURED_SITES),
+    [featuredScenic],
+  );
+
+  const buildFavoriteKey = useCallback((poiType: PoiType, poiId: string) => `${poiType}:${poiId}`, []);
+
+  const resolveFeaturedPoiType = useCallback((site: FeaturedSiteUnion): PoiType => {
+    if ('category' in site) {
+      if (site.category === 'museum') return 'museum';
+      if (site.category === 'heritage') return 'heritage';
+    }
+    return 'scenic';
+  }, []);
+
+  const syncFavoriteKeys = useCallback(
+    async (targets: { poiType: PoiType; poiId: string }[]) => {
+      if (targets.length === 0) return;
+
+      const uniqueTargets = Array.from(
+        new Set(targets.map((t) => `${t.poiType}:${t.poiId}`)),
+      ).map((key) => {
+        const [poiType, poiId] = key.split(':');
+        return { poiType: poiType as PoiType, poiId };
+      });
+
+      const checks = await Promise.all(
+        uniqueTargets.map(async (target) => ({
+          key: buildFavoriteKey(target.poiType, target.poiId),
+          active: await isInFavorites(target.poiId, 'favorite', target.poiType),
+        })),
+      );
+
+      setFavoriteKeys((prev) => {
+        const next = new Set(prev);
+        for (const target of uniqueTargets) {
+          next.delete(buildFavoriteKey(target.poiType, target.poiId));
+        }
+        for (const check of checks) {
+          if (check.active) next.add(check.key);
+        }
+        return next;
+      });
+    },
+    [buildFavoriteKey],
+  );
+
+  const toggleFavorite = useCallback(
+    async (
+      poiId: string,
+      poiName: string,
+      poiType: PoiType,
+      snapshot?: FavoritePoiSnapshot,
+    ) => {
+      const key = buildFavoriteKey(poiType, poiId);
+      if (favoriteBusyKeys.has(key)) return;
+
+      setFavoriteBusyKeys((prev) => new Set(prev).add(key));
+      try {
+        const isActive = favoriteKeys.has(key);
+        const result = isActive
+          ? await removeFavorite(poiId, 'favorite', poiType)
+          : await addFavorite(poiId, poiName, poiType, 'favorite', snapshot);
+
+        if (!result.success) {
+          Alert.alert('操作失败', result.error ?? '请稍后重试');
+          return;
+        }
+
+        setFavoriteKeys((prev) => {
+          const next = new Set(prev);
+          if (isActive) next.delete(key);
+          else next.add(key);
+          return next;
+        });
+      } finally {
+        setFavoriteBusyKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [buildFavoriteKey, favoriteBusyKeys, favoriteKeys],
+  );
 
   const refreshHeaderLocation = useCallback(async () => {
     try {
@@ -132,6 +245,24 @@ export default function HomeScreen() {
     void refreshNearby();
   }, [refreshNearby]);
 
+  useEffect(() => {
+    void syncFavoriteKeys(
+      displayedFeaturedSites.map((site) => ({
+        poiType: resolveFeaturedPoiType(site),
+        poiId: site.id,
+      })),
+    );
+  }, [displayedFeaturedSites, resolveFeaturedPoiType, syncFavoriteKeys]);
+
+  useEffect(() => {
+    void syncFavoriteKeys(
+      nearbyPois.map((poi) => ({
+        poiType: poi.poi_type,
+        poiId: poi.id,
+      })),
+    );
+  }, [nearbyPois, syncFavoriteKeys]);
+
   const handleCategorySelect = (id: string) => {
     if (id === 'heritage') {
       router.push('/heritage-directory');
@@ -183,11 +314,101 @@ export default function HomeScreen() {
     [],
   );
 
+  const handleAiGuideForFeaturedSite = useCallback(
+    (site: FeaturedSiteUnion) => {
+      if (!site?.id || !site?.name) return;
+      const banner = bannerMetaForFeaturedSite(site);
+      triggerInlineAiGuide({
+        id: site.id,
+        name: site.name,
+        poiType: 'scenic',
+        image: site.image || FEATURED_SITES[0].image,
+        typeLabel: 'A 级景区',
+        ...banner,
+      });
+    },
+    [triggerInlineAiGuide],
+  );
+
+  const handleAiGuideForNearbyPoi = useCallback(
+    (poi: (typeof nearbyPois)[number]) => {
+      if (!poi?.id || !poi?.name) return;
+      const banner = bannerMetaForNearbyPoi(poi);
+      triggerInlineAiGuide({
+        id: poi.id,
+        name: poi.name,
+        poiType: poi.poi_type,
+        image: poi.images?.[0] || FEATURED_SITES[0].image,
+        typeLabel:
+          poi.poi_type === 'scenic'
+            ? 'A 级景区'
+            : poi.poi_type === 'heritage'
+              ? '重点文保'
+              : '博物馆',
+        ...banner,
+      });
+    },
+    [triggerInlineAiGuide],
+  );
+
+  const handleCheckInNearbyPoi = useCallback(
+    async (poi: (typeof nearbyPois)[number], confirmLowAccuracy = false) => {
+      if (!locationCoords) {
+        Alert.alert('无法打卡', '当前未获取到定位，请稍后重试。');
+        return;
+      }
+
+      setCheckInBusyPoiId(poi.id);
+      try {
+        const result = await checkInToPoi({
+          poiId: poi.id,
+          poiType: poi.poi_type,
+          userLocation: locationCoords,
+          accuracy: locationAccuracy,
+          confirmLowAccuracy,
+        });
+
+        if (!result.success) {
+          if (result.requiresConfirmation && result.code === 'LOW_ACCURACY') {
+            Alert.alert('定位精度不足', result.message, [
+              { text: '取消', style: 'cancel' },
+              {
+                text: '仍要打卡',
+                style: 'destructive',
+                onPress: () => {
+                  void handleCheckInNearbyPoi(poi, true);
+                },
+              },
+            ]);
+            return;
+          }
+          Alert.alert('打卡失败', result.message);
+          return;
+        }
+
+        const newStampText =
+          result.unlockedStamps && result.unlockedStamps.length > 0
+            ? `\n新印章：${result.unlockedStamps.map((s) => s.name).join('、')}`
+            : '';
+        const newAchievementText =
+          result.unlockedAchievements && result.unlockedAchievements.length > 0
+            ? `\n新成就：${result.unlockedAchievements.map((a) => a.title).join('、')}`
+            : '';
+
+        Alert.alert('打卡成功', `${result.message}${newStampText}${newAchievementText}`);
+        setCheckedInPoiIds((prev) => (prev.includes(poi.id) ? prev : [...prev, poi.id]));
+      } finally {
+        setCheckInBusyPoiId(null);
+      }
+    },
+    [locationAccuracy, locationCoords],
+  );
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
       <SafeAreaView style={styles.safeArea}>
-        <BrandHeader 
+        <BrandHeader
           rightElement={
             <TouchableOpacity
               style={styles.locationRow}
@@ -209,7 +430,7 @@ export default function HomeScreen() {
         <HeroCarousel />
 
         <View style={styles.aiPromptSection}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.push('/ai-guide-detail')}
             activeOpacity={0.9}
           >
@@ -240,7 +461,6 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <SectionHeader
             title="精选景点地标"
-            subtitle="基于当前定位城市的全市扫街榜必去景点 Top5"
             onSeeAll={() => {
               void refreshFeaturedScenic();
             }}
@@ -256,7 +476,7 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.horizontalList}
           >
-            {(featuredScenic.length > 0 ? featuredScenic : FEATURED_SITES).map((site) => (
+            {displayedFeaturedSites.map((site) => (
               <SiteCard
                 key={site.id}
                 name={site.name}
@@ -270,7 +490,9 @@ export default function HomeScreen() {
                 distance={site.distance}
                 isStamped={'isStamped' in site ? site.isStamped : false}
                 level={site.level}
-                onPress={() => {}}
+                onAiGuide={() => {
+                  handleAiGuideForFeaturedSite(site);
+                }}
                 onNavigate={
                   'lng' in site && 'lat' in site
                     ? () => {
@@ -278,6 +500,17 @@ export default function HomeScreen() {
                       }
                     : undefined
                 }
+                isFavorite={favoriteKeys.has(buildFavoriteKey(resolveFeaturedPoiType(site), site.id))}
+                onFavorite={() => {
+                  void toggleFavorite(site.id, site.name, resolveFeaturedPoiType(site), {
+                    poi_name: site.name,
+                    province: site.province ?? null,
+                    city: site.city ?? null,
+                    district: 'district' in site ? site.district ?? null : null,
+                    level_tag: site.level ?? null,
+                    image_url: site.image ?? null,
+                  });
+                }}
               />
             ))}
           </ScrollView>
@@ -286,7 +519,6 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <SectionHeader
             title="周边文旅点位"
-            subtitle="定位授权用于文化地标推荐与距离计算（默认10km）"
             onSeeAll={() => {
               void refreshNearby();
             }}
@@ -304,7 +536,7 @@ export default function HomeScreen() {
                 name={poi.name}
                 type={
                   poi.poi_type === 'scenic'
-                    ? 'A级景区'
+                    ? 'A 级景区'
                     : poi.poi_type === 'heritage'
                       ? '重点文保'
                       : '博物馆'
@@ -314,9 +546,27 @@ export default function HomeScreen() {
                 isOpen
                 image={poi.images?.[0] || FEATURED_SITES[0].image}
                 isFree={poi.poi_type === 'museum'}
-                onPress={() => {}}
+                onAiGuide={() => {
+                  handleAiGuideForNearbyPoi(poi);
+                }}
                 onNavigate={() => {
                   void handleNavigateNearbyPoi(poi);
+                }}
+                onCheckIn={() => {
+                  void handleCheckInNearbyPoi(poi);
+                }}
+                checkInBusy={checkInBusyPoiId === poi.id}
+                isCheckedIn={checkedInPoiIds.includes(poi.id)}
+                isFavorite={favoriteKeys.has(buildFavoriteKey(poi.poi_type, poi.id))}
+                onFavorite={() => {
+                  void toggleFavorite(poi.id, poi.name, poi.poi_type, {
+                    poi_name: poi.name,
+                    province: poi.province ?? null,
+                    city: null,
+                    district: null,
+                    level_tag: poi.label ?? null,
+                    image_url: poi.images?.[0] ?? null,
+                  });
                 }}
               />
             ))
@@ -334,11 +584,11 @@ export default function HomeScreen() {
               <Text style={styles.insightLabel}>今日文化小知识</Text>
               <Text style={styles.insightTitle}>为什么唐代佛教艺术最为繁盛？</Text>
               <Text style={styles.insightBody}>
-                唐朝是中国历史上最开放的朝代之一，玄奘西行取经、武则天崇佛等因素共同推动了佛教文化的黄金时代…
+                唐朝是中国历史上最开放的朝代之一，玄奘西行取经、皇家崇佛与丝路交流共同推动了佛教文化的黄金时代。
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.insightBtn}
-                onPress={() => router.push('/ai-guide-detail')}
+                onPress={() => router.push('/ai-qa-chat')}
               >
                 <Sparkles size={14} color={Colors.accent} />
                 <Text style={styles.insightBtnText}>AI深度解析</Text>
@@ -349,6 +599,8 @@ export default function HomeScreen() {
 
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {inlineAiGuideModal}
 
       <Modal
         visible={fallbackVisible}

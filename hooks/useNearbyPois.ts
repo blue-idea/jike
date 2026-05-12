@@ -30,6 +30,7 @@ export interface UseNearbyPoisReturn {
   error: string | null;
   locationStatus: LocationStatus;
   locationCoords: LocationCoords | null;
+  locationAccuracy: number | null;
   loadNearby: (options?: Partial<NearbyQueryOptions>) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -43,6 +44,7 @@ export function useNearbyPois(
   const [error, setError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<LocationStatus>('idle');
   const [locationCoords, setLocationCoords] = useState<LocationCoords | null>(null);
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
 
   const loadNearby = useCallback(
     async (overrides?: Partial<NearbyQueryOptions>) => {
@@ -55,9 +57,11 @@ export function useNearbyPois(
         if (!loc.coords) {
           setError(loc.error ?? '无法获取位置');
           setPois([]);
+          setLocationAccuracy(null);
           return;
         }
         setLocationCoords(loc.coords);
+        setLocationAccuracy(loc.accuracy);
 
         // 2. 查询附近 POI
         const data = await queryNearbyPoisRPC(
@@ -85,5 +89,14 @@ export function useNearbyPois(
     }
   }, [autoLoad, loadNearby]);
 
-  return { pois, loading, error, locationStatus, locationCoords, loadNearby, refresh };
+  return {
+    pois,
+    loading,
+    error,
+    locationStatus,
+    locationCoords,
+    locationAccuracy,
+    loadNearby,
+    refresh,
+  };
 }

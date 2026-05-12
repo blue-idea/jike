@@ -1,45 +1,158 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, StatusBar, Image,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Colors } from '@/constants/Colors';
 import { FEATURED_SITES } from '@/constants/MockData';
 import { SiteListCard } from '@/components/discover/SiteListCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { BrandHeader } from '@/components/ui/BrandHeader';
-import { Heart, Bookmark, Map, Trash2, FolderOpen, MessageCircle, ChevronRight } from 'lucide-react-native';
+import {
+  Heart,
+  Bookmark,
+  Map,
+  Trash2,
+  FolderOpen,
+  MessageCircle,
+  ChevronRight,
+  LoaderCircle,
+} from 'lucide-react-native';
 import { CollectionMapSection } from '@/components/collection/CollectionMapSection';
 import { HeatTrendEntryCard } from '@/components/heatmap/HeatTrendEntryCard';
+import {
+  addFavorite,
+  clearFavorites,
+  getFavorites,
+  getFavoritesStats,
+  removeFavorite,
+  type FavoriteItem,
+  type FavoriteType,
+  type FavoritesStats,
+} from '@/lib/favorites/favoritesService';
 
 const TABS = [
-  { id: 'favorites', label: '收藏', Icon: Heart },
-  { id: 'bookmarks', label: '想去', Icon: Bookmark },
-  { id: 'visited', label: '去过', Icon: Map },
+  { id: 'favorite' as FavoriteType, label: '收藏', Icon: Heart },
+  { id: 'want_to_go' as FavoriteType, label: '想去', Icon: Bookmark },
+  { id: 'visited' as FavoriteType, label: '去过', Icon: Map },
 ];
 
-const COLLECTION_ITEMS = FEATURED_SITES.slice(0, 3);
+const EMPTY_STATS: FavoritesStats = {
+  favorite_count: 0,
+  want_to_go_count: 0,
+  visited_count: 0,
+  total_interactions: 0,
+};
+
+const POI_TYPE_LABEL: Record<FavoriteItem['poi_type'], string> = {
+  scenic: '景区',
+  heritage: '文保',
+  museum: '博物馆',
+};
 
 export default function CollectionScreen() {
-  const [activeTab, setActiveTab] = useState('favorites');
-  const [favorites, setFavorites] = useState<Set<string>>(new Set(['fs1', 'fs2', 'fs3']));
+  const [activeTab, setActiveTab] = useState<FavoriteType>('favorite');
+  const [items, setItems] = useState<FavoriteItem[]>([]);
+  const [stats, setStats] = useState<FavoritesStats>(EMPTY_STATS);
+  const [loading, setLoading] = useState(false);
+  const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [isMapInteracting, setIsMapInteracting] = useState(false);
 
-  const toggleFavorite = (id: string) => {
-    setFavorites((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const loadActiveData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [rows, latestStats] = await Promise.all([
+        getFavorites(activeTab, 100),
+        getFavoritesStats(),
+      ]);
+      setItems(rows);
+      setStats(latestStats);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab]);
 
-  const items = COLLECTION_ITEMS.filter((s) => {
-    if (activeTab === 'favorites') return favorites.has(s.id);
-    if (activeTab === 'visited') return s.isStamped;
-    return !s.isStamped && !favorites.has(s.id);
-  });
+  useFocusEffect(
+    useCallback(() => {
+      void loadActiveData();
+    }, [loadActiveData]),
+  );
+
+  const activeCount = useMemo(() => {
+    if (activeTab === 'favorite') return stats.favorite_count;
+    if (activeTab === 'want_to_go') return stats.want_to_go_count;
+    return stats.visited_count;
+  }, [activeTab, stats.favorite_count, stats.visited_count, stats.want_to_go_count]);
+
+  const moveToKind = useCallback(
+    async (item: FavoriteItem, nextKind: FavoriteType) => {
+      if (item.kind === nextKind) return;
+      setMutatingId(item.id);
+      try {
+        const result = await addFavorite(item.poi_id, item.poi_name, item.poi_type, nextKind);
+        if (!result.success) {
+          Alert.alert('操作失败', result.error ?? '请稍后重试');
+          return;
+        }
+        await loadActiveData();
+      } finally {
+        setMutatingId(null);
+      }
+    },
+    [loadActiveData],
+  );
+
+  const removeCurrentItem = useCallback(
+    async (item: FavoriteItem) => {
+      setMutatingId(item.id);
+      try {
+        const result = await removeFavorite(item.poi_id, item.kind, item.poi_type);
+        if (!result.success) {
+          Alert.alert('删除失败', result.error ?? '请稍后重试');
+          return;
+        }
+        await loadActiveData();
+      } finally {
+        setMutatingId(null);
+      }
+    },
+    [loadActiveData],
+  );
+
+  const toggleFavoriteForItem = useCallback(
+    async (item: FavoriteItem) => {
+      if (item.kind === 'favorite') {
+        await removeCurrentItem(item);
+        return;
+      }
+      await moveToKind(item, 'favorite');
+    },
+    [moveToKind, removeCurrentItem],
+  );
+
+  const confirmClear = useCallback(() => {
+    if (activeCount === 0) return;
+    const tabLabel = TABS.find((tab) => tab.id === activeTab)?.label ?? '当前分类';
+    Alert.alert('清空确认', `确认清空「${tabLabel}」吗？此操作不可撤销。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认清空',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await clearFavorites(activeTab);
+          if (!result.success) {
+            Alert.alert('清空失败', result.error ?? '请稍后重试');
+            return;
+          }
+          await loadActiveData();
+        },
+      },
+    ]);
+  }, [activeCount, activeTab, loadActiveData]);
 
   return (
     <View style={styles.root}>
@@ -88,42 +201,106 @@ export default function CollectionScreen() {
             ))}
           </View>
         </View>
-        {items.length === 0 ? (
+        {loading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator color={Colors.primary} />
+            <Text style={styles.loadingText}>正在加载收藏数据...</Text>
+          </View>
+        ) : items.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
               <FolderOpen size={40} color={Colors.textLight} />
             </View>
             <Text style={styles.emptyTitle}>暂无内容</Text>
-            <Text style={styles.emptyDesc}>探索发现页面，收藏你感兴趣的文化地标</Text>
+            <Text style={styles.emptyDesc}>在列表或详情里标记后，会同步显示在这里</Text>
           </View>
         ) : (
           <>
             <View style={styles.countRow}>
-              <Text style={styles.countText}>共 {items.length} 处</Text>
-              <TouchableOpacity style={styles.clearBtn}>
+              <Text style={styles.countText}>共 {activeCount} 处</Text>
+              <TouchableOpacity style={styles.clearBtn} onPress={confirmClear}>
                 <Trash2 size={14} color={Colors.textMuted} />
                 <Text style={styles.clearBtnText}>清空</Text>
               </TouchableOpacity>
             </View>
-            {items.map((site) => (
-              <SiteListCard
-                key={site.id}
-                name={site.name}
-                category={site.category}
-                level={site.level}
-                province={site.province}
-                city={site.city}
-                dynasty={site.dynasty}
-                type={site.type}
-                image={site.image}
-                tags={site.tags}
-                distance={site.distance}
-                rating={site.rating}
-                isFavorite={favorites.has(site.id)}
-                onPress={() => {}}
-                onFavorite={() => toggleFavorite(site.id)}
-              />
-            ))}
+            {items.map((item) => {
+              const isBusy = mutatingId === item.id;
+              return (
+                <View key={item.id}>
+                  <SiteListCard
+                    name={item.poi_name}
+                    category={item.poi_type}
+                    level={item.level_tag ?? ''}
+                    province={item.province ?? '未知省份'}
+                    city={item.city ?? item.district ?? '未知地区'}
+                    dynasty={item.district ?? '文化地标'}
+                    type={POI_TYPE_LABEL[item.poi_type]}
+                    image={item.image_url ?? FEATURED_SITES[0].image}
+                    tags={[item.level_tag, item.province].filter(Boolean) as string[]}
+                    isFavorite={item.kind === 'favorite'}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/poi/[id]',
+                        params: { id: item.poi_id, type: item.poi_type },
+                      })}
+                    onFavorite={() => {
+                      void toggleFavoriteForItem(item);
+                    }}
+                  />
+                  <View style={styles.itemActionsRow}>
+                    <TouchableOpacity
+                      style={[styles.itemActionBtn, item.kind === 'favorite' && styles.itemActionBtnActive]}
+                      onPress={() => {
+                        void toggleFavoriteForItem(item);
+                      }}
+                      disabled={isBusy}
+                    >
+                      <Heart size={14} color={item.kind === 'favorite' ? Colors.white : Colors.primary} />
+                      <Text style={[styles.itemActionText, item.kind === 'favorite' && styles.itemActionTextActive]}>
+                        收藏
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.itemActionBtn, item.kind === 'want_to_go' && styles.itemActionBtnActive]}
+                      onPress={() => {
+                        void moveToKind(item, 'want_to_go');
+                      }}
+                      disabled={isBusy}
+                    >
+                      <Bookmark size={14} color={item.kind === 'want_to_go' ? Colors.white : Colors.primary} />
+                      <Text style={[styles.itemActionText, item.kind === 'want_to_go' && styles.itemActionTextActive]}>
+                        想去
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.itemActionBtn, item.kind === 'visited' && styles.itemActionBtnActive]}
+                      onPress={() => {
+                        void moveToKind(item, 'visited');
+                      }}
+                      disabled={isBusy}
+                    >
+                      <Map size={14} color={item.kind === 'visited' ? Colors.white : Colors.primary} />
+                      <Text style={[styles.itemActionText, item.kind === 'visited' && styles.itemActionTextActive]}>
+                        去过
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.itemDeleteBtn}
+                      onPress={() => {
+                        void removeCurrentItem(item);
+                      }}
+                      disabled={isBusy}
+                    >
+                      {isBusy ? (
+                        <LoaderCircle size={14} color={Colors.textMuted} />
+                      ) : (
+                        <Trash2 size={14} color={Colors.textMuted} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
           </>
         )}
 
@@ -146,12 +323,12 @@ export default function CollectionScreen() {
               </View>
               <TouchableOpacity
                 style={styles.recommendFavBtn}
-                onPress={() => toggleFavorite(site.id)}
+                onPress={() => {}}
               >
                 <Heart
                   size={14}
-                  color={favorites.has(site.id) ? Colors.seal : Colors.textLight}
-                  fill={favorites.has(site.id) ? Colors.seal : 'transparent'}
+                  color={Colors.textLight}
+                  fill="transparent"
                 />
               </TouchableOpacity>
             </TouchableOpacity>
@@ -268,6 +445,55 @@ const styles = StyleSheet.create({
   clearBtnText: {
     fontSize: 13,
     color: Colors.textMuted,
+  },
+  loadingState: {
+    paddingVertical: 28,
+    alignItems: 'center',
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: Colors.textMuted,
+  },
+  itemActionsRow: {
+    marginHorizontal: 20,
+    marginTop: -4,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  itemActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.primary + '33',
+    backgroundColor: Colors.card,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  itemActionBtnActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  itemActionText: {
+    fontSize: 12,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  itemActionTextActive: {
+    color: Colors.white,
+  },
+  itemDeleteBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.backgroundAlt,
+    marginLeft: 'auto',
   },
   emptyState: {
     alignItems: 'center',

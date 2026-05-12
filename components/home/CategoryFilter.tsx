@@ -1,16 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { Colors } from '@/constants/Colors';
-import { Layers, Landmark, Building2, Mountain, Hop as Home, Circle, Triangle } from 'lucide-react-native';
+import { Layers, Landmark, Building2, Mountain } from 'lucide-react-native';
 
 const CATEGORIES = [
   { id: 'all', label: '全部', Icon: Layers },
   { id: 'heritage', label: '国保单位', Icon: Landmark },
   { id: 'museum', label: '博物馆', Icon: Building2 },
   { id: 'scenic', label: '5A景区', Icon: Mountain },
-  { id: 'ancient', label: '古建筑', Icon: Home },
-  { id: 'grotto', label: '石窟', Icon: Circle },
-  { id: 'tomb', label: '陵墓', Icon: Triangle },
 ];
 
 interface CategoryFilterProps {

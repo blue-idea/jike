@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -9,21 +9,14 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import {
-  Clock4,
-  History,
-  Info,
-  Landmark,
-  ScrollText,
-  Sparkles,
-  Star,
-  UserCircle2,
-} from 'lucide-react-native';
+import { Sparkles } from 'lucide-react-native';
 import { CommonTopBar } from '@/components/ui/CommonTopBar';
-import { TtsControlButton } from '@/components/ai/TtsControlButton';
+import { AiGuideNarrativeView } from '@/components/ai/AiGuideNarrativeView';
 import { Colors } from '@/constants/Colors';
 import { useAiGuide } from '@/hooks/useAiGuide';
 import type { PoiType } from '@/lib/ai/aiGuideQueries';
+import { getCurrentLocationWithPermission } from '@/lib/location/locationService';
+import { queryAiGuidePoiOptions } from '@/lib/ai/aiGuidePoiOptions';
 
 type PoiOption = {
   id: string;
@@ -59,26 +52,44 @@ const TYPE_OPTIONS: { type: PoiType; label: string }[] = [
   { type: 'museum', label: '博物馆' },
 ];
 
-const SECTION_META: Record<
-  string,
-  { title: string; icon: React.ComponentType<{ size?: number; color?: string }> }
-> = {
-  background: { title: '历史背景', icon: History },
-  cultural: { title: '文化解读', icon: Landmark },
-  poetry: { title: '主要看点', icon: ScrollText },
-  story: { title: '人物故事', icon: UserCircle2 },
-  timeline: { title: '朝代演变', icon: Clock4 },
-  attraction: { title: '参观建议', icon: Star },
-};
-
 function isPoiType(value: string | undefined): value is PoiType {
   return value === 'scenic' || value === 'heritage' || value === 'museum';
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '刚刚生成';
-  return date.toLocaleString('zh-CN', { hour12: false });
+function splitSubtitleRegion(subtitle: string): { region: string | null; detail: string | null } {
+  const normalized = subtitle.replace(/・/g, '·');
+  const parts = normalized.split('·').map((s) => s.trim()).filter(Boolean);
+  if (parts.length === 0) return { region: null, detail: null };
+  if (parts.length === 1) return { region: null, detail: parts[0] };
+  return { region: parts[0], detail: parts.slice(1).join(' · ') };
+}
+
+function heritageBadgeForType(poiType: PoiType): string {
+  switch (poiType) {
+    case 'heritage':
+      return '全国重点文保';
+    case 'museum':
+      return '国家一级博物馆';
+    case 'scenic':
+    default:
+      return '国家5A景区';
+  }
+}
+
+function narrativeBannerFromPoi(poi: PoiOption | null): {
+  regionLabel: string | null;
+  heroTagLeft: string | null;
+  heroTagRight: string | null;
+} {
+  if (!poi) {
+    return { regionLabel: null, heroTagLeft: null, heroTagRight: null };
+  }
+  const { region, detail } = splitSubtitleRegion(poi.subtitle);
+  return {
+    regionLabel: region,
+    heroTagLeft: detail,
+    heroTagRight: heritageBadgeForType(poi.poiType),
+  };
 }
 
 export default function AiGuideDetailScreen() {
@@ -91,10 +102,46 @@ export default function AiGuideDetailScreen() {
   const [activeType, setActiveType] = useState<PoiType>(
     isPoiType(params.poiType) ? params.poiType : 'heritage',
   );
+  const [nearbyPoiOptions, setNearbyPoiOptions] = useState<PoiOption[]>([]);
+  const [loadingNearbyPois, setLoadingNearbyPois] = useState(false);
+  const [nearbyPoiError, setNearbyPoiError] = useState<string | null>(null);
   const loginAlertShown = useRef(false);
 
+  const loadNearbyPoiOptions = useCallback(async () => {
+    setLoadingNearbyPois(true);
+    setNearbyPoiError(null);
+
+    try {
+      const location = await getCurrentLocationWithPermission();
+      if (!location.coords) {
+        setNearbyPoiError(location.error ?? '未能获取当前定位，已展示默认地标。');
+        setNearbyPoiOptions([]);
+        return;
+      }
+
+      const options = await queryAiGuidePoiOptions(location.coords);
+      if (options.length === 0) {
+        setNearbyPoiError('当前点位附近暂未找到符合条件的地标，已展示默认地标。');
+        setNearbyPoiOptions([]);
+        return;
+      }
+
+      setNearbyPoiOptions(options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '附近地标加载失败';
+      setNearbyPoiError(`${message}，已展示默认地标。`);
+      setNearbyPoiOptions([]);
+    } finally {
+      setLoadingNearbyPois(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadNearbyPoiOptions();
+  }, [loadNearbyPoiOptions]);
+
   const poiOptions = useMemo(() => {
-    const options = [...PRESET_POIS];
+    const options = nearbyPoiOptions.length > 0 ? [...nearbyPoiOptions] : [...PRESET_POIS];
     const routePoiType = isPoiType(params.poiType) ? params.poiType : null;
     if (
       routePoiType &&
@@ -110,7 +157,7 @@ export default function AiGuideDetailScreen() {
       });
     }
     return options;
-  }, [params.poiId, params.poiName, params.poiType]);
+  }, [nearbyPoiOptions, params.poiId, params.poiName, params.poiType]);
 
   const visiblePois = useMemo(
     () => poiOptions.filter((item) => item.poiType === activeType),
@@ -238,7 +285,14 @@ export default function AiGuideDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>选择地标</Text>
+          {loadingNearbyPois ? (
+            <Text style={styles.poiHintText}>{'\u6b63\u5728\u83b7\u53d6\u5f53\u524d\u70b9\u4f4d\u5468\u8fb9\u5730\u6807...'}</Text>
+          ) : null}
+          {nearbyPoiError ? <Text style={styles.poiHintText}>{nearbyPoiError}</Text> : null}
           <View style={styles.poiList}>
+            {visiblePois.length === 0 ? (
+              <Text style={styles.poiHintText}>{'\u5f53\u524d\u5206\u7c7b\u6682\u65e0\u53ef\u9009\u5730\u6807\uff0c\u8bf7\u5207\u6362\u5206\u7c7b\u91cd\u8bd5\u3002'}</Text>
+            ) : null}
             {visiblePois.map((poi) => {
               const selected = poi.id === selectedPoiId;
               return (
@@ -300,41 +354,15 @@ export default function AiGuideDetailScreen() {
         ) : null}
 
         {result ? (
-          <View style={styles.resultCard}>
-            <View style={styles.resultHead}>
-              <View style={styles.resultHeadText}>
-                <Text style={styles.resultTitle}>AI 导游：{result.poi_name}</Text>
-                <Text style={styles.generatedAt}>
-                  生成时间：{formatDateTime(result.generated_at)}
-                </Text>
-              </View>
-              <TtsControlButton fullText={speakableText} />
-            </View>
-
-            {result.sections.map((section, index) => {
-              const meta = SECTION_META[section.type] ?? {
-                title: section.title,
-                icon: Info,
-              };
-              const Icon = meta.icon;
-              return (
-                <View key={`${section.type}_${index}`} style={styles.sectionCard}>
-                  <View style={styles.sectionHeader}>
-                    <Icon size={18} color={Colors.primary} />
-                    <Text style={styles.sectionCardTitle}>
-                      {section.title || meta.title}
-                    </Text>
-                  </View>
-                  <Text style={styles.sectionBody}>{section.content}</Text>
-                </View>
-              );
-            })}
-
-            <View style={styles.disclaimerCard}>
-              <Info size={16} color={Colors.textMuted} />
-              <Text style={styles.disclaimerText}>{result.disclaimer}</Text>
-            </View>
-          </View>
+          <AiGuideNarrativeView
+            result={result}
+            speakableText={speakableText}
+            heroImageUri={null}
+            {...narrativeBannerFromPoi(selectedPoi)}
+            nameSubtitle={null}
+            cacheHint={null}
+            parentContentPaddingH={24}
+          />
         ) : (
           <View style={styles.placeholderCard}>
             <Text style={styles.placeholderTitle}>等待生成讲解</Text>
@@ -357,7 +385,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingBottom: 28,
     gap: 14,
   },
@@ -438,6 +466,11 @@ const styles = StyleSheet.create({
   },
   poiList: {
     gap: 8,
+  },
+  poiHintText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    lineHeight: 18,
   },
   poiCard: {
     borderRadius: 12,
@@ -529,69 +562,6 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontSize: 13,
     fontWeight: '700',
-  },
-  resultCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    backgroundColor: Colors.card,
-    padding: 12,
-    gap: 10,
-  },
-  resultHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  resultHeadText: {
-    flex: 1,
-    gap: 3,
-  },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.text,
-  },
-  generatedAt: {
-    fontSize: 12,
-    color: Colors.textMuted,
-  },
-  sectionCard: {
-    borderRadius: 10,
-    backgroundColor: Colors.backgroundAlt,
-    padding: 10,
-    gap: 6,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  sectionCardTitle: {
-    fontSize: 14,
-    color: Colors.text,
-    fontWeight: '700',
-  },
-  sectionBody: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    lineHeight: 21,
-  },
-  disclaimerCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    backgroundColor: Colors.cardMuted,
-    padding: 10,
-  },
-  disclaimerText: {
-    flex: 1,
-    fontSize: 12,
-    color: Colors.textMuted,
-    lineHeight: 18,
   },
   placeholderCard: {
     borderRadius: 12,

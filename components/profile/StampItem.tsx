@@ -5,19 +5,26 @@ import { Lock } from 'lucide-react-native';
 
 interface StampItemProps {
   name: string;
-  image: string;
+  image?: string;
+  icon?: string;
   date: string;
   unlocked: boolean;
   color: string;
 }
 
-export function StampItem({ name, image, date, unlocked, color }: StampItemProps) {
+export function StampItem({ name, image, icon, date, unlocked, color }: StampItemProps) {
   return (
     <View style={styles.container}>
       <View style={[styles.stampOuter, { borderColor: unlocked ? color : Colors.borderLight }]}>
         <View style={[styles.stampInner, { borderColor: unlocked ? color + '66' : Colors.borderLight }]}>
           {unlocked ? (
-            <Image source={{ uri: image }} style={styles.stampImage} resizeMode="cover" />
+            image ? (
+              <Image source={{ uri: image }} style={styles.stampImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.iconContainer}>
+                <Text style={styles.iconText}>{icon ?? '🏮'}</Text>
+              </View>
+            )
           ) : (
             <View style={styles.lockedContainer}>
               <Lock size={20} color={Colors.textLight} />
@@ -72,6 +79,17 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  iconContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.backgroundAlt,
+  },
+  iconText: {
+    fontSize: 26,
   },
   sealOverlay: {
     position: 'absolute',

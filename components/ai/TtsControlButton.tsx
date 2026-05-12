@@ -13,9 +13,15 @@ interface TtsControlButtonProps {
   /** 要播报的完整文本（将各 section content 拼接） */
   fullText: string;
   size?: number;
+  /** banner：主色实心圆 + 白图标，用于头图下导览胶囊 */
+  variant?: 'default' | 'banner';
 }
 
-export function TtsControlButton({ fullText, size = 22 }: TtsControlButtonProps) {
+export function TtsControlButton({
+  fullText,
+  size = 22,
+  variant = 'default',
+}: TtsControlButtonProps) {
   const { state, isPlaying, isLoading, speak, pause, resume, stop } = useTts();
 
   const handlePress = async () => {
@@ -51,24 +57,31 @@ export function TtsControlButton({ fullText, size = 22 }: TtsControlButtonProps)
         ? '继续语音播报'
         : '开始语音播报';
 
+  const onPrimary = variant === 'banner';
+
   const renderIcon = () => {
     if (isLoading) {
-      return <ActivityIndicator color={Colors.primary} size="small" />;
+      return <ActivityIndicator color={onPrimary ? Colors.white : Colors.primary} size="small" />;
     }
     if (isPlaying) {
       return <Pause size={size} color={Colors.white} />;
     }
     if (state === 'paused') {
-      return <Play size={size} color={Colors.primary} />;
+      return <Play size={size} color={onPrimary ? Colors.white : Colors.primary} />;
     }
-    return <Volume2 size={size} color={Colors.primary} />;
+    return <Volume2 size={size} color={onPrimary ? Colors.white : Colors.primary} />;
   };
 
   const activeState = isPlaying;
 
   return (
     <TouchableOpacity
-      style={[styles.btn, activeState && styles.btnActive]}
+      style={[
+        styles.btn,
+        onPrimary && styles.btnBanner,
+        activeState && (onPrimary ? styles.btnBannerActive : styles.btnActive),
+        onPrimary && state === 'paused' && !activeState && styles.btnBannerPaused,
+      ]}
       onPress={() => {
         void handlePress();
       }}
@@ -101,6 +114,17 @@ const styles = StyleSheet.create({
   btnActive: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+  },
+  btnBanner: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  btnBannerActive: {
+    backgroundColor: Colors.primaryDark,
+    borderColor: Colors.primaryDark,
+  },
+  btnBannerPaused: {
+    opacity: 0.92,
   },
   cornerIcon: {
     position: 'absolute',

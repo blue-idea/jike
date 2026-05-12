@@ -18,6 +18,7 @@ export default function RegisterScreen() {
   const { signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,6 +27,10 @@ export default function RegisterScreen() {
     setError(null);
     if (!agreed) {
       setError('请先阅读并同意服务条款与隐私政策。');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('两次输入的密码不一致。');
       return;
     }
     const pwdErr = validatePasswordForSignup(password);
@@ -58,7 +63,7 @@ export default function RegisterScreen() {
       <View style={authFormStyles.field}>
         <Text style={authFormStyles.label}>邮箱</Text>
         <TextInput
-          style={authFormStyles.input}
+          style={[authFormStyles.input, styles.inputBg]}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
@@ -71,7 +76,7 @@ export default function RegisterScreen() {
       <View style={authFormStyles.field}>
         <Text style={authFormStyles.label}>密码</Text>
         <TextInput
-          style={authFormStyles.input}
+          style={[authFormStyles.input, styles.inputBg]}
           secureTextEntry
           placeholder="设置登录密码"
           placeholderTextColor="#9A8A78"
@@ -79,6 +84,17 @@ export default function RegisterScreen() {
           onChangeText={setPassword}
         />
         <Text style={authFormStyles.hint}>{PASSWORD_RULES_HINT}</Text>
+      </View>
+      <View style={authFormStyles.field}>
+        <Text style={authFormStyles.label}>确认密码</Text>
+        <TextInput
+          style={[authFormStyles.input, styles.inputBg]}
+          secureTextEntry
+          placeholder="请再次输入密码"
+          placeholderTextColor="#9A8A78"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+        />
       </View>
       <TouchableOpacity
         style={styles.agreeRow}
@@ -116,6 +132,9 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
+  inputBg: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+  },
   agreeRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

@@ -1,39 +1,128 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, SafeAreaView,
-  TouchableOpacity, StatusBar, Image,
+  View, Text, ScrollView, StyleSheet,
+  TouchableOpacity, StatusBar, Image, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
-import { STAMPS_DATA, ACHIEVEMENTS, USER_STATS, PROVINCES_VISITED } from '@/constants/MockData';
 import { StampItem } from '@/components/profile/StampItem';
 import { AchievementCard } from '@/components/profile/AchievementCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import {
-  Settings, Share2, ChevronRight, MapPin, Award,
+  ChevronRight, MapPin,
   BookOpen, Globe, Clock, Star, LogOut,
 } from 'lucide-react-native';
+import { BrandHeader } from '@/components/ui/BrandHeader';
 import { useAuth } from '@/contexts/AuthContext';
+import { getPassportProfile, type PassportProfileData } from '@/lib/checkin/checkinService';
+import { getFavoritesStats, type FavoritesStats } from '@/lib/favorites/favoritesService';
+import { supabase } from '@/lib/supabase';
 
 const AVATAR = 'https://images.pexels.com/photos/1040881/pexels-photo-1040881.jpeg?auto=compress&cs=tinysrgb&w=200';
-
-const STAT_ITEMS = [
-  { label: '已打卡', value: USER_STATS.sitesVisited, Icon: MapPin, color: Colors.accent },
-  { label: '探索省份', value: USER_STATS.provincesExplored, Icon: Globe, color: Colors.primary },
-  { label: '数字印章', value: USER_STATS.stampsCollected, Icon: Star, color: Colors.seal },
-  { label: '完成旅程', value: USER_STATS.journeysCompleted, Icon: Clock, color: Colors.jade },
+const TITLES = ['文化旅行者', '古建筑爱好者', '博物馆达人'];
+const PROVINCE_GRID = [
+  '云', '甘', '陕', '豫', '冀', '晋', '鲁', '苏', '浙', '闽',
+  '粤', '湘', '鄂', '皖', '川', '渝', '贵', '滇', '琼', '藏',
+  '新', '蒙', '辽', '吉', '黑', '京', '津', '沪',
 ];
 
-const TITLES = ['文化旅行者', '古建筑爱好者', '博物馆达人'];
+function formatDate(value: string | null): string {
+  if (!value) return '未解锁';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未解锁';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}.${m}.${d}`;
+}
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const [selectedTitle, setSelectedTitle] = useState(0);
-  const displayedStamps = STAMPS_DATA.slice(0, 6);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<PassportProfileData | null>(null);
+  const [favoritesStats, setFavoritesStats] = useState<FavoritesStats>({
+    favorite_count: 0,
+    want_to_go_count: 0,
+    visited_count: 0,
+    total_interactions: 0,
+  });
+  const [journeyCount, setJourneyCount] = useState(0);
+
+  const loadProfile = useCallback(async () => {
+    if (!user?.id) {
+      setProfileData(null);
+      return;
+    }
+
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [data, latestFavoritesStats, journeysCountResult] = await Promise.all([
+        getPassportProfile(user.id),
+        getFavoritesStats(),
+        supabase
+          .from('user_journey')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+      ]);
+      setProfileData(data);
+      setFavoritesStats(latestFavoritesStats);
+      setJourneyCount(journeysCountResult.count ?? 0);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '加载失败，请稍后重试。';
+      setLoadError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
+
+  const displayedStamps = profileData?.stamps.slice(0, 6) ?? [];
+  const achievements = profileData?.achievements ?? [];
+  const unlockedAchievementCount = achievements.filter((item) => item.unlocked).length;
+
+  const stats = {
+    sitesVisited: profileData?.stats.checkinCount ?? 0,
+    provincesExplored: profileData?.stats.provincesCovered ?? 0,
+    stampsCollected: profileData?.stats.stampsCollected ?? 0,
+    journeysCompleted: journeyCount,
+  };
+
+  const statItems = [
+    { label: '已打卡', value: stats.sitesVisited, Icon: MapPin, color: Colors.accent },
+    { label: '探索省份', value: stats.provincesExplored, Icon: Globe, color: Colors.primary },
+    { label: '数字印章', value: stats.stampsCollected, Icon: Star, color: Colors.seal },
+    { label: '完成旅程', value: stats.journeysCompleted, Icon: Clock, color: Colors.jade },
+  ];
+
+  const visitedProvinceAbbrevs = new Set((profileData?.footprint ?? []).map((item) => item.abbrev));
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <BrandHeader
+        rightElement={
+          <View style={styles.headerRowActions}>
+            <TouchableOpacity
+              style={[styles.navIconBtn, { backgroundColor: Colors.error + '15' }]}
+              onPress={() => void signOut()}
+              accessibilityRole="button"
+              accessibilityLabel="登出"
+            >
+              <LogOut size={18} color={Colors.error} />
+            </TouchableOpacity>
+          </View>
+        }
+      />
       <ScrollView showsVerticalScrollIndicator={false}>
         <LinearGradient
           colors={[Colors.primaryDark, Colors.primary, Colors.jade]}
@@ -41,24 +130,7 @@ export default function ProfileScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <SafeAreaView>
-            <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.headerBtn}>
-                <Share2 size={18} color={Colors.white} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.headerBtn}>
-                <Settings size={18} color={Colors.white} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.headerBtn}
-                onPress={() => void signOut()}
-                accessibilityRole="button"
-                accessibilityLabel="登出"
-              >
-                <LogOut size={18} color={Colors.white} />
-              </TouchableOpacity>
-            </View>
-
+          <SafeAreaView edges={['bottom', 'left', 'right']}>
             <View style={styles.profileSection}>
               <View style={styles.avatarWrapper}>
                 <Image source={{ uri: AVATAR }} style={styles.avatar} />
@@ -82,7 +154,7 @@ export default function ProfileScreen() {
               <View style={styles.passportHeader}>
                 <View style={styles.passportLeft}>
                   <Text style={styles.passportLabel}>文旅护照</Text>
-                  <Text style={styles.passportId}>JIKE-2024-001847</Text>
+                  <Text style={styles.passportId}>JIKE-{user?.id?.slice(0, 8)?.toUpperCase() ?? 'GUEST'}</Text>
                 </View>
                 <View style={styles.passportSeal}>
                   <Text style={styles.passportSealText}>集</Text>
@@ -90,7 +162,7 @@ export default function ProfileScreen() {
                 </View>
               </View>
               <View style={styles.statsGrid}>
-                {STAT_ITEMS.map(({ label, value, Icon, color }) => (
+                {statItems.map(({ label, value, Icon, color }) => (
                   <View key={label} style={styles.statItem}>
                     <View style={[styles.statIconBg, { backgroundColor: color + '22' }]}>
                       <Icon size={16} color={color} />
@@ -100,29 +172,49 @@ export default function ProfileScreen() {
                   </View>
                 ))}
               </View>
+              <View style={styles.collectionStatsRow}>
+                <View style={styles.collectionStatPill}>
+                  <Text style={styles.collectionStatLabel}>收藏</Text>
+                  <Text style={styles.collectionStatValue}>{favoritesStats.favorite_count}</Text>
+                </View>
+                <View style={styles.collectionStatPill}>
+                  <Text style={styles.collectionStatLabel}>想去</Text>
+                  <Text style={styles.collectionStatValue}>{favoritesStats.want_to_go_count}</Text>
+                </View>
+                <View style={styles.collectionStatPill}>
+                  <Text style={styles.collectionStatLabel}>去过</Text>
+                  <Text style={styles.collectionStatValue}>{favoritesStats.visited_count}</Text>
+                </View>
+              </View>
             </View>
           </SafeAreaView>
         </LinearGradient>
 
         <View style={styles.content}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color={Colors.primary} />
+              <Text style={styles.loadingText}>护照数据加载中...</Text>
+            </View>
+          ) : null}
+          {loadError ? (
+            <Text style={styles.errorText}>{loadError}</Text>
+          ) : null}
+
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionTitleRow}>
                 <View style={styles.sectionAccent} />
                 <Text style={styles.sectionTitle}>文化足迹地图</Text>
               </View>
-              <TouchableOpacity>
-                <Text style={styles.seeAll}>查看全图</Text>
+              <TouchableOpacity onPress={() => void loadProfile()}>
+                <Text style={styles.seeAll}>刷新</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.heatmapContainer}>
               <View style={styles.heatmapGrid}>
-                {['云', '甘', '陕', '豫', '冀', '晋', '鲁', '苏', '浙', '闽',
-                  '粤', '湘', '鄂', '皖', '川', '渝', '贵', '滇', '琼', '藏',
-                  '新', '蒙', '辽', '吉', '黑', '京', '津', '沪'].map((province) => {
-                  const visited = PROVINCES_VISITED.includes(
-                    province === '京' ? '北京' : province === '沪' ? '上海' : ''
-                  ) || ['陕', '甘', '京', '苏', '浙', '川'].includes(province);
+                {PROVINCE_GRID.map((province) => {
+                  const visited = visitedProvinceAbbrevs.has(province);
                   return (
                     <View
                       key={province}
@@ -141,7 +233,7 @@ export default function ProfileScreen() {
               <View style={styles.heatmapLegend}>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: Colors.primary }]} />
-                  <Text style={styles.legendText}>已探索 ({PROVINCES_VISITED.length} 省)</Text>
+                  <Text style={styles.legendText}>已探索 ({stats.provincesExplored} 省)</Text>
                 </View>
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: Colors.borderLight }]} />
@@ -162,8 +254,8 @@ export default function ProfileScreen() {
                 <StampItem
                   key={stamp.id}
                   name={stamp.name}
-                  image={stamp.image}
-                  date={stamp.date}
+                  icon={stamp.icon}
+                  date={formatDate(stamp.unlockedAt)}
                   unlocked={stamp.unlocked}
                   color={stamp.color}
                 />
@@ -172,8 +264,8 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.section}>
-            <SectionHeader title="文化成就" subtitle={`${ACHIEVEMENTS.filter((a) => a.unlocked).length} / ${ACHIEVEMENTS.length} 已解锁`} />
-            {ACHIEVEMENTS.map((achievement) => (
+            <SectionHeader title="文化成就" subtitle={`${unlockedAchievementCount} / ${achievements.length} 已解锁`} />
+            {achievements.map((achievement) => (
               <AchievementCard
                 key={achievement.id}
                 title={achievement.title}
@@ -189,10 +281,10 @@ export default function ProfileScreen() {
 
           <View style={styles.menuSection}>
             {[
-              { label: '我的游记', icon: BookOpen, desc: '3 篇', color: Colors.accent },
-              { label: '参观历史', icon: Clock, desc: '47 次', color: Colors.primary },
-              { label: '文化称号', icon: Award, desc: '5 个', color: Colors.seal },
-              { label: '探索地图', icon: Globe, desc: '12 省', color: Colors.jade },
+              { label: '我的游记', icon: BookOpen, desc: '开发中', color: Colors.accent },
+              { label: '参观历史', icon: Clock, desc: `${stats.sitesVisited} 次`, color: Colors.primary },
+              { label: '文化称号', icon: Star, desc: `${unlockedAchievementCount} 个`, color: Colors.seal },
+              { label: '探索地图', icon: Globe, desc: `${stats.provincesExplored} 省`, color: Colors.jade },
             ].map(({ label, icon: Icon, desc, color }) => (
               <TouchableOpacity key={label} style={styles.menuItem}>
                 <View style={[styles.menuIcon, { backgroundColor: color + '18' }]}>
@@ -222,24 +314,25 @@ const styles = StyleSheet.create({
   heroGradient: {
     paddingBottom: 24,
   },
-  headerActions: {
+  headerRowActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 8,
     gap: 8,
+    alignItems: 'center',
   },
-  headerBtn: {
+  navIconBtn: {
     width: 36,
     height: 36,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: Colors.card,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
+
   profileSection: {
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 32,
     paddingBottom: 16,
     gap: 8,
   },
@@ -340,6 +433,29 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+  },
+  collectionStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  collectionStatPill: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    gap: 2,
+  },
+  collectionStatLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.74)',
+    fontWeight: '600',
+  },
+  collectionStatValue: {
+    fontSize: 16,
+    color: Colors.white,
+    fontWeight: '800',
   },
   statItem: {
     alignItems: 'center',
@@ -502,5 +618,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textMuted,
     marginTop: 1,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  errorText: {
+    marginHorizontal: 20,
+    marginBottom: 10,
+    color: Colors.error,
+    fontSize: 13,
   },
 });

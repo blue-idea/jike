@@ -68,13 +68,8 @@ function parseLevelFromType(type: string): string {
   return '景点';
 }
 
-function buildTags(type: string, district: string): string[] {
-  const tags = ['周边推荐', district];
-  const firstType = type.split(';')[0]?.trim();
-  if (firstType) {
-    tags.push(firstType);
-  }
-  return tags.slice(0, 3);
+function buildTags(district: string): string[] {
+  return [district];
 }
 
 function mapPoiToScenicItem(poi: AmapPlacePoi): AmapNearbyScenicItem | null {
@@ -103,7 +98,7 @@ function mapPoiToScenicItem(poi: AmapPlacePoi): AmapNearbyScenicItem | null {
     level: parseLevelFromType(type),
     distance: Number.isFinite(distanceM) ? formatDistance(distanceM) : '距离未知',
     image: poi.photos?.[0]?.url?.trim() || null,
-    tags: buildTags(type, district),
+    tags: buildTags(district),
     rating: Number.isFinite(rating) ? rating : 0,
   };
 }

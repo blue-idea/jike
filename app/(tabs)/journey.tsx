@@ -15,6 +15,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader';
 import { BrandHeader } from '@/components/ui/BrandHeader';
 import { Plus, Calendar, MapPin, ChevronRight } from 'lucide-react-native';
 import { AiItineraryPlanner } from '@/components/journey/AiItineraryPlanner';
+import { TravelJournalPanel } from '@/components/journey/TravelJournalPanel';
 
 export default function JourneyScreen() {
   return (
@@ -79,6 +80,7 @@ export default function JourneyScreen() {
           </TouchableOpacity>
         ))}
 
+        <TravelJournalPanel />
         <View style={{ height: 30 }} />
       </ScrollView>
     </View>

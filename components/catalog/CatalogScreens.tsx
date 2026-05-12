@@ -41,7 +41,12 @@ import {
 } from '@/lib/catalog/supabaseCatalogQueries';
 import { navigateWithGaode, type RoutePoint } from '@/lib/route/routeService';
 import { RouteWebViewFallback } from '@/components/route/RouteWebViewFallback';
-import { getCurrentLocationWithPermission } from '@/lib/location/locationService';
+import {
+  calcDistance,
+  formatDistance,
+  getCurrentLocationWithPermission,
+  type LocationCoords,
+} from '@/lib/location/locationService';
 import {
   GeoLocationFilter,
   HeritageFilterPanel,
@@ -55,10 +60,16 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
+  Heart,
   MapPin,
   Navigation,
   Star,
 } from 'lucide-react-native';
+import { CatalogAiGuideButton } from '@/components/ai/CatalogAiGuideButton';
+import type { InlineAiGuidePoiInput } from '@/lib/ai/inlineAiGuideTypes';
+import { catalogMuseumItemToInlineInput, scenicFeatureToInlineInput } from '@/lib/ai/inlineAiGuideCatalog';
+import { addFavorite, isInFavorites, removeFavorite } from '@/lib/favorites/favoritesService';
+import type { PoiType } from '@/lib/poi/poiQueries';
 
 function TopBar({ title }: { title: string }) {
   const router = useRouter();
@@ -91,24 +102,77 @@ interface ScenicSearchContentProps {
   loadMoreSignal?: number;
   externalFilters?: ScenicLocationFormState;
   onApplyQuery?: (filters: ScenicLocationFormState) => void;
+  onAiGuide?: (input: InlineAiGuidePoiInput) => void;
+  sortMode?: DiscoverSortMode;
+  distanceSortCenter?: LocationCoords | null;
 }
 
 interface HeritageDirectoryContentProps {
   loadMoreSignal?: number;
   externalFilters?: HeritageQueryFormState;
   onApplyQuery?: (filters: HeritageQueryFormState) => void;
+  onAiGuide?: (input: InlineAiGuidePoiInput) => void;
+  sortMode?: DiscoverSortMode;
+  distanceSortCenter?: LocationCoords | null;
 }
 
 interface MuseumDirectoryContentProps {
   loadMoreSignal?: number;
   externalFilters?: MuseumQueryFormState;
   onApplyQuery?: (filters: MuseumQueryFormState) => void;
+  onAiGuide?: (input: InlineAiGuidePoiInput) => void;
+  sortMode?: DiscoverSortMode;
+  distanceSortCenter?: LocationCoords | null;
 }
 
 const PAGE_SIZE = 5;
 const PLACEHOLDER = '\u8bf7\u9009\u62e9';
 const ALL_LEVEL = '\u5168\u90e8\u7b49\u7ea7';
 const ALL = '\u5168\u90e8';
+export type DiscoverSortMode = 'default' | 'distance';
+
+type DistanceSortableItem = {
+  id: string;
+  title: string;
+  lng?: number;
+  lat?: number;
+  distance?: string;
+};
+
+function sortItemsByDistance<T extends DistanceSortableItem>(
+  items: T[],
+  center: LocationCoords | null,
+): T[] {
+  if (!center) return items;
+
+  return items
+    .map((item, index) => {
+      if (typeof item.lng !== 'number' || typeof item.lat !== 'number') {
+        return {
+          item,
+          index,
+          distanceM: Number.MAX_SAFE_INTEGER,
+        };
+      }
+
+      const distanceM = calcDistance(center.lat, center.lng, item.lat, item.lng);
+      return {
+        item: {
+          ...item,
+          distance: formatDistance(distanceM),
+        },
+        index,
+        distanceM,
+      };
+    })
+    .sort((a, b) => {
+      if (a.distanceM !== b.distanceM) {
+        return a.distanceM - b.distanceM;
+      }
+      return a.index - b.index;
+    })
+    .map((entry) => entry.item);
+}
 
 function hasValidImage(image?: string) {
   return Boolean(image && image.trim());
@@ -177,6 +241,126 @@ function buildDestinationPoint(item: {
   };
 }
 
+function buildFavoriteKey(poiType: PoiType, poiId: string): string {
+  return `${poiType}:${poiId}`;
+}
+
+function FavoriteIconButton({
+  active,
+  onPress,
+  disabled = false,
+  style,
+}: {
+  active: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+  style?: object;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.favoriteIconBtn, active && styles.favoriteIconBtnActive, style]}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.85}
+    >
+      <Heart
+        size={13}
+        color={active ? Colors.white : Colors.primary}
+        fill={active ? Colors.seal : 'transparent'}
+      />
+    </TouchableOpacity>
+  );
+}
+
+function useDirectoryFavorites(
+  poiType: PoiType,
+  items: { id: string; title: string }[],
+) {
+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
+  const [favoriteBusyKeys, setFavoriteBusyKeys] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    const uniqueItems = Array.from(new Map(items.map((item) => [item.id, item])).values());
+
+    if (uniqueItems.length === 0) {
+      setFavoriteKeys(new Set());
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void (async () => {
+      const checks = await Promise.all(
+        uniqueItems.map(async (item) => ({
+          key: buildFavoriteKey(poiType, item.id),
+          active: await isInFavorites(item.id, 'favorite', poiType),
+        })),
+      );
+
+      if (cancelled) return;
+      setFavoriteKeys(() => {
+        const next = new Set<string>();
+        for (const check of checks) {
+          if (check.active) next.add(check.key);
+        }
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [items, poiType]);
+
+  const isFavorite = useCallback(
+    (poiId: string) => favoriteKeys.has(buildFavoriteKey(poiType, poiId)),
+    [favoriteKeys, poiType],
+  );
+
+  const isBusy = useCallback(
+    (poiId: string) => favoriteBusyKeys.has(buildFavoriteKey(poiType, poiId)),
+    [favoriteBusyKeys, poiType],
+  );
+
+  const toggleFavorite = useCallback(
+    async (poiId: string, poiName: string) => {
+      const key = buildFavoriteKey(poiType, poiId);
+      if (favoriteBusyKeys.has(key)) return;
+
+      setFavoriteBusyKeys((prev) => new Set(prev).add(key));
+
+      try {
+        const currentlyActive = favoriteKeys.has(key);
+        const result = currentlyActive
+          ? await removeFavorite(poiId, 'favorite', poiType)
+          : await addFavorite(poiId, poiName, poiType, 'favorite');
+
+        if (!result.success) {
+          Alert.alert('操作失败', result.error ?? '请稍后重试');
+          return;
+        }
+
+        setFavoriteKeys((prev) => {
+          const next = new Set(prev);
+          if (currentlyActive) next.delete(key);
+          else next.add(key);
+          return next;
+        });
+      } finally {
+        setFavoriteBusyKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [favoriteBusyKeys, favoriteKeys, poiType],
+  );
+
+  return { isFavorite, isBusy, toggleFavorite };
+}
+
 function useCatalogNavigationFallback() {
   const [fallbackVisible, setFallbackVisible] = useState(false);
   const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
@@ -236,6 +420,9 @@ export function ScenicSearchContent({
   loadMoreSignal: _loadMoreSignal = 0,
   externalFilters,
   onApplyQuery: externalOnApplyQuery,
+  onAiGuide,
+  sortMode = 'default',
+  distanceSortCenter = null,
 }: ScenicSearchContentProps) {
   const { homeCatalogLocation } = useCatalogLocation();
   const scenicFilterLocation = useMemo(
@@ -358,8 +545,20 @@ export function ScenicSearchContent({
     scenicPage,
   ]);
 
-  const hero = scenicResults[0];
-  const scenicCards = scenicResults.slice(1);
+  const displayedScenicResults = useMemo(
+    () =>
+      sortMode === 'distance'
+        ? sortItemsByDistance(scenicResults, distanceSortCenter)
+        : scenicResults,
+    [distanceSortCenter, scenicResults, sortMode],
+  );
+
+  const hero = displayedScenicResults[0];
+  const scenicCards = displayedScenicResults.slice(1);
+  const { isFavorite, isBusy, toggleFavorite } = useDirectoryFavorites(
+    'scenic',
+    scenicResults.map((item) => ({ id: item.id, title: item.title })),
+  );
   const handleScenicNavigate = useCallback(async (item: ScenicFeature) => {
     const destination = buildDestinationPoint(item);
     if (!destination) {
@@ -428,6 +627,13 @@ export function ScenicSearchContent({
               colors={['rgba(14,71,83,0.1)', 'rgba(14,71,83,0.88)']}
               style={styles.heroOverlay}
             >
+              {onAiGuide && hero ? (
+                <View style={styles.heroAiGuideWrap} pointerEvents="box-none">
+                  <CatalogAiGuideButton
+                    onPress={() => onAiGuide(scenicFeatureToInlineInput(hero))}
+                  />
+                </View>
+              ) : null}
               <View style={styles.heroBadgeRow}>
                 {hero.tags.map((tag) => (
                   <Text key={tag} style={styles.heroBadge}>
@@ -438,6 +644,24 @@ export function ScenicSearchContent({
                   <Text style={styles.heroDistance}>{hero.distance}</Text>
                 ) : null}
               </View>
+              <View style={styles.heroActionGroup}>
+                <FavoriteIconButton
+                  active={isFavorite(hero.id)}
+                  disabled={isBusy(hero.id)}
+                  onPress={() => {
+                    void toggleFavorite(hero.id, hero.title);
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.heroActionBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    void handleScenicNavigate(hero);
+                  }}
+                >
+                  <Navigation size={13} color={Colors.primary} />
+                </TouchableOpacity>
+              </View>
               <View style={styles.heroMeta}>
                 <Text style={styles.heroTitle}>{hero.title}</Text>
                 <Text style={styles.heroSubtitle}>{hero.subtitle}</Text>
@@ -446,7 +670,30 @@ export function ScenicSearchContent({
           </SmartImageBackground>
         ) : hero ? (
           <View style={styles.textOnlyResultItem}>
-            <Text style={styles.textOnlyResultTitle}>{hero.title}</Text>
+            <View style={styles.textOnlyHeader}>
+              <Text style={[styles.textOnlyResultTitle, styles.textOnlyTitleFlex]}>{hero.title}</Text>
+              <View style={styles.textOnlyHeaderActions}>
+                {onAiGuide ? (
+                  <CatalogAiGuideButton onPress={() => onAiGuide(scenicFeatureToInlineInput(hero))} />
+                ) : null}
+                <FavoriteIconButton
+                  active={isFavorite(hero.id)}
+                  disabled={isBusy(hero.id)}
+                  onPress={() => {
+                    void toggleFavorite(hero.id, hero.title);
+                  }}
+                />
+                <TouchableOpacity
+                  style={styles.listNavBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    void handleScenicNavigate(hero);
+                  }}
+                >
+                  <Navigation size={13} color={Colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
             <Text style={styles.cardSubtitle}>{hero.subtitle}</Text>
             {hero.tags.length > 0 ? (
               <View style={styles.textOnlyTagsRow}>
@@ -480,17 +727,35 @@ export function ScenicSearchContent({
                     style={styles.scenicCardImage}
                     fallbackSource={SCENIC_FALLBACK_IMAGE}
                   />
-                  <TouchableOpacity
-                    style={styles.scenicNavIcon}
-                    activeOpacity={0.85}
-                    onPress={() => {
-                      void handleScenicNavigate(item);
-                    }}
-                  >
-                    <Navigation size={13} color={Colors.primary} />
-                  </TouchableOpacity>
+                  {onAiGuide ? (
+                    <View style={styles.catalogAiGuideTopRight} pointerEvents="box-none">
+                      <CatalogAiGuideButton
+                        onPress={() => onAiGuide(scenicFeatureToInlineInput(item))}
+                      />
+                    </View>
+                  ) : null}
                   <View style={styles.cardBody}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
+                    <View style={styles.textOnlyHeader}>
+                      <Text style={[styles.cardTitle, styles.textOnlyTitleFlex]}>{item.title}</Text>
+                      <View style={styles.textOnlyHeaderActions}>
+                        <FavoriteIconButton
+                          active={isFavorite(item.id)}
+                          disabled={isBusy(item.id)}
+                          onPress={() => {
+                            void toggleFavorite(item.id, item.title);
+                          }}
+                        />
+                        <TouchableOpacity
+                          style={styles.listNavBtn}
+                          activeOpacity={0.85}
+                          onPress={() => {
+                            void handleScenicNavigate(item);
+                          }}
+                        >
+                          <Navigation size={13} color={Colors.primary} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
                     <View style={styles.tagRow}>
                       {item.tags.map((tag) => (
                         <Text key={tag} style={styles.cardTag}>
@@ -509,7 +774,23 @@ export function ScenicSearchContent({
                 </View>
               ) : (
                 <View key={item.id} style={styles.textOnlyResultItem}>
-                  <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
+                  <View style={styles.textOnlyHeader}>
+                    <Text style={[styles.textOnlyResultTitle, styles.textOnlyTitleFlex]}>{item.title}</Text>
+                    <View style={styles.textOnlyHeaderActions}>
+                      {onAiGuide ? (
+                        <CatalogAiGuideButton
+                          onPress={() => onAiGuide(scenicFeatureToInlineInput(item))}
+                        />
+                      ) : null}
+                      <FavoriteIconButton
+                        active={isFavorite(item.id)}
+                        disabled={isBusy(item.id)}
+                        onPress={() => {
+                          void toggleFavorite(item.id, item.title);
+                        }}
+                      />
+                    </View>
+                  </View>
                   <Text style={styles.cardSubtitle}>{item.subtitle}</Text>
                   {item.tags.length > 0 ? (
                     <View style={styles.textOnlyTagsRow}>
@@ -565,6 +846,9 @@ export function HeritageDirectoryContent({
   loadMoreSignal = 0,
   externalFilters,
   onApplyQuery: externalOnApplyQuery,
+  onAiGuide,
+  sortMode = 'default',
+  distanceSortCenter = null,
 }: HeritageDirectoryContentProps = {}) {
   const { homeCatalogLocation } = useCatalogLocation();
   const heritageFilterLocation = useMemo(
@@ -714,6 +998,19 @@ export function HeritageDirectoryContent({
     loadingMore,
   ]);
 
+  const displayedHeritageResults = useMemo(
+    () =>
+      sortMode === 'distance'
+        ? sortItemsByDistance(heritageResults, distanceSortCenter)
+        : heritageResults,
+    [distanceSortCenter, heritageResults, sortMode],
+  );
+
+  const { isFavorite, isBusy, toggleFavorite } = useDirectoryFavorites(
+    'heritage',
+    displayedHeritageResults.map((item) => ({ id: item.id, title: item.title })),
+  );
+
   const handleHeritageNavigate = useCallback(async (item: MuseumCardItem) => {
     const destination = buildDestinationPoint(item);
     if (!destination) {
@@ -768,7 +1065,7 @@ export function HeritageDirectoryContent({
       ) : null}
 
       <View style={styles.museumList}>
-        {heritageResults.map((item) => (
+        {displayedHeritageResults.map((item) => (
           hasValidImage(item.image) ? (
             <TouchableOpacity
               key={item.id}
@@ -789,18 +1086,36 @@ export function HeritageDirectoryContent({
                   </Text>
                 ))}
               </View>
-              <TouchableOpacity
-                style={styles.scenicNavIcon}
-                activeOpacity={0.85}
-                onPress={() => {
-                  void handleHeritageNavigate(item);
-                }}
-              >
-                <Navigation size={13} color={Colors.primary} />
-              </TouchableOpacity>
+              {onAiGuide ? (
+                <View style={styles.catalogAiGuideTopRight} pointerEvents="box-none">
+                  <CatalogAiGuideButton
+                    onPress={() => onAiGuide(catalogMuseumItemToInlineInput(item, 'heritage'))}
+                  />
+                </View>
+              ) : null}
               <View style={styles.museumCardBody}>
-                <View>
-                  <Text style={styles.museumTitle}>{item.title}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.textOnlyHeader}>
+                    <Text style={[styles.museumTitle, styles.textOnlyTitleFlex]}>{item.title}</Text>
+                    <View style={styles.textOnlyHeaderActions}>
+                      <FavoriteIconButton
+                        active={isFavorite(item.id)}
+                        disabled={isBusy(item.id)}
+                        onPress={() => {
+                          void toggleFavorite(item.id, item.title);
+                        }}
+                      />
+                      <TouchableOpacity
+                        style={styles.listNavBtn}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          void handleHeritageNavigate(item);
+                        }}
+                      >
+                        <Navigation size={13} color={Colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                   <View style={styles.locationRow}>
                     <MapPin size={12} color={Colors.textMuted} />
                     <Text style={styles.locationText}>{item.location}</Text>
@@ -811,16 +1126,30 @@ export function HeritageDirectoryContent({
           ) : (
             <View key={item.id} style={styles.textOnlyResultItem}>
               <View style={styles.textOnlyHeader}>
-                <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
-                <TouchableOpacity
-                  style={styles.listNavBtn}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    void handleHeritageNavigate(item);
-                  }}
-                >
-                  <Navigation size={13} color={Colors.primary} />
-                </TouchableOpacity>
+                <Text style={[styles.textOnlyResultTitle, styles.textOnlyTitleFlex]}>{item.title}</Text>
+                <View style={styles.textOnlyHeaderActions}>
+                  {onAiGuide ? (
+                    <CatalogAiGuideButton
+                      onPress={() => onAiGuide(catalogMuseumItemToInlineInput(item, 'heritage'))}
+                    />
+                  ) : null}
+                  <FavoriteIconButton
+                    active={isFavorite(item.id)}
+                    disabled={isBusy(item.id)}
+                    onPress={() => {
+                      void toggleFavorite(item.id, item.title);
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.listNavBtn}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      void handleHeritageNavigate(item);
+                    }}
+                  >
+                    <Navigation size={13} color={Colors.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.locationRow}>
                 <MapPin size={12} color={Colors.textMuted} />
@@ -874,6 +1203,9 @@ export function MuseumDirectoryContent({
   loadMoreSignal = 0,
   externalFilters,
   onApplyQuery: externalOnApplyQuery,
+  onAiGuide,
+  sortMode = 'default',
+  distanceSortCenter = null,
 }: MuseumDirectoryContentProps = {}) {
   const { homeCatalogLocation } = useCatalogLocation();
   const museumFilterLocation = useMemo(
@@ -994,6 +1326,19 @@ export function MuseumDirectoryContent({
     museumPage,
   ]);
 
+  const displayedMuseumResults = useMemo(
+    () =>
+      sortMode === 'distance'
+        ? sortItemsByDistance(museumResults, distanceSortCenter)
+        : museumResults,
+    [distanceSortCenter, museumResults, sortMode],
+  );
+
+  const { isFavorite, isBusy, toggleFavorite } = useDirectoryFavorites(
+    'museum',
+    displayedMuseumResults.map((item) => ({ id: item.id, title: item.title })),
+  );
+
   const handleMuseumNavigate = useCallback(async (item: MuseumCardItem) => {
     const destination = buildDestinationPoint(item);
     if (!destination) {
@@ -1041,7 +1386,7 @@ export function MuseumDirectoryContent({
       ) : null}
 
       <View style={styles.museumList}>
-        {museumResults.map((item) => (
+        {displayedMuseumResults.map((item) => (
           hasValidImage(item.image) ? (
             <TouchableOpacity
               key={item.id}
@@ -1062,18 +1407,36 @@ export function MuseumDirectoryContent({
                   </Text>
                 ))}
               </View>
-              <TouchableOpacity
-                style={styles.scenicNavIcon}
-                activeOpacity={0.85}
-                onPress={() => {
-                  void handleMuseumNavigate(item);
-                }}
-              >
-                <Navigation size={13} color={Colors.primary} />
-              </TouchableOpacity>
+              {onAiGuide ? (
+                <View style={styles.catalogAiGuideTopRight} pointerEvents="box-none">
+                  <CatalogAiGuideButton
+                    onPress={() => onAiGuide(catalogMuseumItemToInlineInput(item, 'museum'))}
+                  />
+                </View>
+              ) : null}
               <View style={styles.museumCardBody}>
-                <View>
-                  <Text style={styles.museumTitle}>{item.title}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.textOnlyHeader}>
+                    <Text style={[styles.museumTitle, styles.textOnlyTitleFlex]}>{item.title}</Text>
+                    <View style={styles.textOnlyHeaderActions}>
+                      <FavoriteIconButton
+                        active={isFavorite(item.id)}
+                        disabled={isBusy(item.id)}
+                        onPress={() => {
+                          void toggleFavorite(item.id, item.title);
+                        }}
+                      />
+                      <TouchableOpacity
+                        style={styles.listNavBtn}
+                        activeOpacity={0.85}
+                        onPress={() => {
+                          void handleMuseumNavigate(item);
+                        }}
+                      >
+                        <Navigation size={13} color={Colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                   <View style={styles.locationRow}>
                     <MapPin size={12} color={Colors.textMuted} />
                     <Text style={styles.locationText}>{item.location}</Text>
@@ -1085,16 +1448,30 @@ export function MuseumDirectoryContent({
           ) : (
             <View key={item.id} style={styles.textOnlyResultItem}>
               <View style={styles.textOnlyHeader}>
-                <Text style={styles.textOnlyResultTitle}>{item.title}</Text>
-                <TouchableOpacity
-                  style={styles.listNavBtn}
-                  activeOpacity={0.85}
-                  onPress={() => {
-                    void handleMuseumNavigate(item);
-                  }}
-                >
-                  <Navigation size={13} color={Colors.primary} />
-                </TouchableOpacity>
+                <Text style={[styles.textOnlyResultTitle, styles.textOnlyTitleFlex]}>{item.title}</Text>
+                <View style={styles.textOnlyHeaderActions}>
+                  {onAiGuide ? (
+                    <CatalogAiGuideButton
+                      onPress={() => onAiGuide(catalogMuseumItemToInlineInput(item, 'museum'))}
+                    />
+                  ) : null}
+                  <FavoriteIconButton
+                    active={isFavorite(item.id)}
+                    disabled={isBusy(item.id)}
+                    onPress={() => {
+                      void toggleFavorite(item.id, item.title);
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={styles.listNavBtn}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      void handleMuseumNavigate(item);
+                    }}
+                  >
+                    <Navigation size={13} color={Colors.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.locationRow}>
                 <MapPin size={12} color={Colors.textMuted} />
@@ -1374,6 +1751,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'space-between',
     padding: 18,
+    position: 'relative',
+  },
+  heroAiGuideWrap: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 2,
   },
   heroBadgeRow: {
     flexDirection: 'row',
@@ -1430,9 +1814,15 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 190,
   },
-  scenicNavIcon: {
+  catalogAiGuideTopRight: {
     position: 'absolute',
-    top: 150,
+    top: 10,
+    right: 10,
+    zIndex: 3,
+  },
+  catalogNavOnImage: {
+    position: 'absolute',
+    bottom: 14,
     right: 14,
     width: 30,
     height: 30,
@@ -1440,6 +1830,46 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.backgroundAlt,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 2,
+  },
+  favoriteIconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.backgroundAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  favoriteIconBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  heroFavoriteWrap: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    zIndex: 3,
+  },
+  heroActionGroup: {
+    position: 'absolute',
+    bottom: 14,
+    right: 14,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 3,
+  },
+  heroActionBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.backgroundAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catalogFavoriteOnImage: {
+    position: 'absolute',
+    bottom: 14,
+    left: 14,
+    zIndex: 2,
   },
   cardBody: {
     padding: 14,
@@ -1845,6 +2275,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
+  },
+  textOnlyHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  textOnlyTitleFlex: {
+    flex: 1,
+    marginBottom: 0,
   },
   listNavBtn: {
     width: 30,
