@@ -77,7 +77,7 @@ third-party services). Show me: 1) how to create a .env.local file,
 | `docs/spec/requirements.md` | 功能与验收 |
 | `docs/spec/data.md` | 数据库与 RLS 原则 |
 | `docs/spec/api.md` | Auth、PostgREST、Edge、分层职责 |
-
+| `docs/spec/test.md` | test的相关信息
 ---
 
 
@@ -107,5 +107,5 @@ docs/spec/
 1. 类型检查，tsc --noEmit 零错误
 2. lint 检查，eslint 零 error（warning 允许） 
 3. 相关单元测试通过率 100% 
-4. 核心 E2E 流程验证通过 
+4. 核心 E2E 流程验证通过，具体要求请查阅docs/spec/test.md 
 5. build 构建检查，无错误
