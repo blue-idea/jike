@@ -47,11 +47,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let cancelled = false;
 
-    void supabase.auth.getSession().then(({ data: { session: next } }) => {
-      if (cancelled) return;
-      setSession(next);
-      setInitialized(true);
-    });
+    void supabase.auth
+      .getSession()
+      .then(({ data: { session: next } }) => {
+        if (cancelled) return;
+        setSession(next);
+      })
+      .catch((error) => {
+        console.warn('auth.getSession failed', error);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setInitialized(true);
+      });
 
     const {
       data: { subscription },

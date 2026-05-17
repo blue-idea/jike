@@ -1,10 +1,10 @@
 # 集刻 · Maestro 冒烟：冷启动后未登录应落在认证门禁（任务 3 / 需求 15–16）
-appId: com.manbudezhu.boltexponativewind
+appId: com.manbudezhu.jike
 ---
 - launchApp:
     clearState: true
 - extendedWaitUntil:
-    visible: "欢迎回来"
+    visible: '欢迎回来'
     timeout: 120000
-- assertVisible: "欢迎回来"
-- assertVisible: "登录"
+- assertVisible: '欢迎回来'
+- assertVisible: '登录'

@@ -55,15 +55,22 @@ export default function HomeScreen() {
   const { setHomeCatalogLocation } = useCatalogLocation();
   const { inlineAiGuideModal, triggerInlineAiGuide } = useInlineAiGuideModal();
   const [location, setLocation] = useState('定位中...');
-  const [featuredScenic, setFeaturedScenic] = useState<AmapNearbyScenicItem[]>([]);
+  const [featuredScenic, setFeaturedScenic] = useState<AmapNearbyScenicItem[]>(
+    [],
+  );
   const [featuredScenicLoading, setFeaturedScenicLoading] = useState(false);
-  const [featuredScenicError, setFeaturedScenicError] = useState<string | null>(null);
+  const [featuredScenicError, setFeaturedScenicError] = useState<string | null>(
+    null,
+  );
   const [fallbackVisible, setFallbackVisible] = useState(false);
-  const [fallbackDestination, setFallbackDestination] = useState<RoutePoint | null>(null);
+  const [fallbackDestination, setFallbackDestination] =
+    useState<RoutePoint | null>(null);
   const [checkInBusyPoiId, setCheckInBusyPoiId] = useState<string | null>(null);
   const [checkedInPoiIds, setCheckedInPoiIds] = useState<string[]>([]);
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
-  const [favoriteBusyKeys, setFavoriteBusyKeys] = useState<Set<string>>(new Set());
+  const [favoriteBusyKeys, setFavoriteBusyKeys] = useState<Set<string>>(
+    new Set(),
+  );
 
   const {
     pois: nearbyPois,
@@ -79,15 +86,21 @@ export default function HomeScreen() {
     [featuredScenic],
   );
 
-  const buildFavoriteKey = useCallback((poiType: PoiType, poiId: string) => `${poiType}:${poiId}`, []);
+  const buildFavoriteKey = useCallback(
+    (poiType: PoiType, poiId: string) => `${poiType}:${poiId}`,
+    [],
+  );
 
-  const resolveFeaturedPoiType = useCallback((site: FeaturedSiteUnion): PoiType => {
-    if ('category' in site) {
-      if (site.category === 'museum') return 'museum';
-      if (site.category === 'heritage') return 'heritage';
-    }
-    return 'scenic';
-  }, []);
+  const resolveFeaturedPoiType = useCallback(
+    (site: FeaturedSiteUnion): PoiType => {
+      if ('category' in site) {
+        if (site.category === 'museum') return 'museum';
+        if (site.category === 'heritage') return 'heritage';
+      }
+      return 'scenic';
+    },
+    [],
+  );
 
   const syncFavoriteKeys = useCallback(
     async (targets: { poiType: PoiType; poiId: string }[]) => {
@@ -171,8 +184,15 @@ export default function HomeScreen() {
         setLocation('定位失败');
         return;
       }
+      if (current.source === 'amap-ip') {
+        setLocation('定位精度不足');
+        return;
+      }
 
-      const address = await reverseGeocodeLocation(current.coords);
+      const address = await reverseGeocodeLocation(current.coords, {
+        source: current.source,
+        coordSystem: current.coordSystem,
+      });
       if (!address) {
         setLocation('未知位置');
         return;
@@ -183,7 +203,8 @@ export default function HomeScreen() {
         setHomeCatalogLocation(normalizedCatalogLocation);
       }
 
-      const city = address.city?.trim() || address.province?.trim() || '当前位置';
+      const city =
+        address.city?.trim() || address.province?.trim() || '当前位置';
       const district = address.district?.trim();
       setLocation(district ? `${city} · ${district}` : city);
     } catch {
@@ -200,13 +221,23 @@ export default function HomeScreen() {
         const message =
           current.status === 'denied' || current.status === 'blocked'
             ? '未开启定位，已展示默认推荐'
-            : current.error ?? '定位失败，已展示默认推荐';
+            : (current.error ?? '定位失败，已展示默认推荐');
         setFeaturedScenic([]);
         setFeaturedScenicError(message);
         return;
       }
+      if (current.source === 'amap-ip') {
+        setFeaturedScenic([]);
+        setFeaturedScenicError(
+          '当前仅获取到城市级粗定位，已展示默认推荐。请开启高精度定位后重试。',
+        );
+        return;
+      }
 
-      const address = await reverseGeocodeLocation(current.coords);
+      const address = await reverseGeocodeLocation(current.coords, {
+        source: current.source,
+        coordSystem: current.coordSystem,
+      });
       const city = address?.city?.trim() || address?.province?.trim() || '';
       if (!city) {
         setFeaturedScenic([]);
@@ -225,7 +256,8 @@ export default function HomeScreen() {
         setFeaturedScenicError('附近暂无景点，已展示默认推荐');
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : '获取精选景点失败';
+      const message =
+        error instanceof Error ? error.message : '获取精选景点失败';
       setFeaturedScenic([]);
       setFeaturedScenicError(`${message}，已展示默认推荐`);
     } finally {
@@ -297,7 +329,9 @@ export default function HomeScreen() {
   );
 
   const handleNavigateFeaturedSite = useCallback(
-    async (site: (typeof featuredScenic)[number] | (typeof FEATURED_SITES)[number]) => {
+    async (
+      site: (typeof featuredScenic)[number] | (typeof FEATURED_SITES)[number],
+    ) => {
       if (!('lng' in site) || !('lat' in site)) return;
       const destination: RoutePoint = {
         id: site.id,
@@ -395,8 +429,13 @@ export default function HomeScreen() {
             ? `\n新成就：${result.unlockedAchievements.map((a) => a.title).join('、')}`
             : '';
 
-        Alert.alert('打卡成功', `${result.message}${newStampText}${newAchievementText}`);
-        setCheckedInPoiIds((prev) => (prev.includes(poi.id) ? prev : [...prev, poi.id]));
+        Alert.alert(
+          '打卡成功',
+          `${result.message}${newStampText}${newAchievementText}`,
+        );
+        setCheckedInPoiIds((prev) =>
+          prev.includes(poi.id) ? prev : [...prev, poi.id],
+        );
       } finally {
         setCheckInBusyPoiId(null);
       }
@@ -416,7 +455,13 @@ export default function HomeScreen() {
               onPress={refreshHeaderLocation}
             >
               <MapPin size={14} color={Colors.accent} />
-              <Text style={styles.location}>{location}</Text>
+              <Text
+                testID="home-location-label"
+                accessibilityLabel={`当前位置：${location}`}
+                style={styles.location}
+              >
+                {location}
+              </Text>
             </TouchableOpacity>
           }
         />
@@ -444,7 +489,9 @@ export default function HomeScreen() {
                 <Sparkles size={18} color={Colors.goldLight} />
                 <View>
                   <Text style={styles.aiTitle}>AI文化向导</Text>
-                  <Text style={styles.aiSubtitle}>告诉我你的偏好，智能规划专属路线</Text>
+                  <Text style={styles.aiSubtitle}>
+                    告诉我你的偏好，智能规划专属路线
+                  </Text>
                 </View>
               </View>
               <View style={styles.aiMicBtn}>
@@ -500,16 +547,24 @@ export default function HomeScreen() {
                       }
                     : undefined
                 }
-                isFavorite={favoriteKeys.has(buildFavoriteKey(resolveFeaturedPoiType(site), site.id))}
+                isFavorite={favoriteKeys.has(
+                  buildFavoriteKey(resolveFeaturedPoiType(site), site.id),
+                )}
                 onFavorite={() => {
-                  void toggleFavorite(site.id, site.name, resolveFeaturedPoiType(site), {
-                    poi_name: site.name,
-                    province: site.province ?? null,
-                    city: site.city ?? null,
-                    district: 'district' in site ? site.district ?? null : null,
-                    level_tag: site.level ?? null,
-                    image_url: site.image ?? null,
-                  });
+                  void toggleFavorite(
+                    site.id,
+                    site.name,
+                    resolveFeaturedPoiType(site),
+                    {
+                      poi_name: site.name,
+                      province: site.province ?? null,
+                      city: site.city ?? null,
+                      district:
+                        'district' in site ? (site.district ?? null) : null,
+                      level_tag: site.level ?? null,
+                      image_url: site.image ?? null,
+                    },
+                  );
                 }}
               />
             ))}
@@ -528,7 +583,9 @@ export default function HomeScreen() {
           ) : nearbyError ? (
             <Text style={styles.nearbyStateText}>{nearbyError}</Text>
           ) : nearbyPois.length === 0 ? (
-            <Text style={styles.nearbyStateText}>附近暂无符合条件的文化地标</Text>
+            <Text style={styles.nearbyStateText}>
+              附近暂无符合条件的文化地标
+            </Text>
           ) : (
             nearbyPois.slice(0, 5).map((poi) => (
               <NearbyCard
@@ -557,7 +614,9 @@ export default function HomeScreen() {
                 }}
                 checkInBusy={checkInBusyPoiId === poi.id}
                 isCheckedIn={checkedInPoiIds.includes(poi.id)}
-                isFavorite={favoriteKeys.has(buildFavoriteKey(poi.poi_type, poi.id))}
+                isFavorite={favoriteKeys.has(
+                  buildFavoriteKey(poi.poi_type, poi.id),
+                )}
                 onFavorite={() => {
                   void toggleFavorite(poi.id, poi.name, poi.poi_type, {
                     poi_name: poi.name,
@@ -582,7 +641,9 @@ export default function HomeScreen() {
               end={{ x: 1, y: 1 }}
             >
               <Text style={styles.insightLabel}>今日文化小知识</Text>
-              <Text style={styles.insightTitle}>为什么唐代佛教艺术最为繁盛？</Text>
+              <Text style={styles.insightTitle}>
+                为什么唐代佛教艺术最为繁盛？
+              </Text>
               <Text style={styles.insightBody}>
                 唐朝是中国历史上最开放的朝代之一，玄奘西行取经、皇家崇佛与丝路交流共同推动了佛教文化的黄金时代。
               </Text>

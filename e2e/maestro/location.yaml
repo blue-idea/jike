@@ -1,0 +1,43 @@
+# 集刻 - 真机定位流程（Maestro）
+# 依赖：已安装 com.manbudezhu.jike（dev build）并可连接 Metro
+appId: com.manbudezhu.jike
+---
+- launchApp
+
+# 首屏可能是登录页，也可能已登录进入首页
+- extendedWaitUntil:
+    visible: "(欢迎回来|AI文化向导|AI导览|定位中\\.\\.\\.|未开启定位|定位失败|未知位置)"
+    timeout: 180000
+
+# 如未登录，执行登录流程
+- runFlow:
+    when:
+      visible: "欢迎回来"
+    commands:
+      - inputText:
+          text: "${MAESTRO_TEST_EMAIL}"
+          index: 0
+      - inputText:
+          text: "${MAESTRO_TEST_PASSWORD}"
+          index: 1
+      - tapOn: "登录"
+
+# 如出现系统定位授权弹窗，点击允许
+- runFlow:
+    when:
+      visible: "(允许|使用 App 时允许|仅在使用该应用时允许|While using the app|Allow)"
+    commands:
+      - tapOn: "(允许|使用 App 时允许|仅在使用该应用时允许|While using the app|Allow)"
+
+# 首页加载成功
+- extendedWaitUntil:
+    visible: "AI文化向导"
+    timeout: 120000
+
+# 不应落入定位失败态
+- assertNotVisible: "(\\u672a\\u5f00\\u542f\\u5b9a\\u4f4d|\\u5b9a\\u4f4d\\u5931\\u8d25|\\u672a\\u77e5\\u4f4d\\u7f6e)"
+
+# 定位文案应呈现“城市·区域”结构（例如：呼和浩特市·西街街道）
+- extendedWaitUntil:
+    visible: ".*(\\u5e02|\\u81ea\\u6cbb\\u533a).*\\u00b7.*(\\u8857\\u9053|\\u533a|\\u53bf|\\u9547).*"
+    timeout: 120000

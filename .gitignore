@@ -40,3 +40,4 @@ yarn-error.*
 
 docs/
 /ui/
+artifacts/

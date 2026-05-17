@@ -144,8 +144,18 @@ async function resolveAutoLocation(level: string): Promise<AutoLocateResult> {
       fallbackLocation: fallbackLocation(level),
     };
   }
+  if (location.source === 'amap-ip') {
+    return {
+      ok: false,
+      message: '当前仅获取到城市级粗定位，请开启高精度定位后重试或手动筛选。',
+      fallbackLocation: fallbackLocation(level),
+    };
+  }
 
-  const address = await reverseGeocodeLocation(location.coords);
+  const address = await reverseGeocodeLocation(location.coords, {
+    source: location.source,
+    coordSystem: location.coordSystem,
+  });
   if (!address) {
     return {
       ok: false,
