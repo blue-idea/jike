@@ -14,7 +14,7 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const DEFAULT_TTS_BASE_URL = 'https://read-aloud-smoky.vercel.app/api';
+const DEFAULT_TTS_BASE_URL = 'https://read-aloud-nine-rho.vercel.app/api';
 const DEFAULT_VOICE_NAME = 'zh-CN-XiaoxiaoNeural';
 const MAX_TEXT_LENGTH = 1200;
 

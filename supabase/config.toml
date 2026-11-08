@@ -1,7 +1,7 @@
 # Supabase CLI 本地配置（迁移与 db 命令用）。云端项目 ID 以 Dashboard 为准。
 # 文档：https://supabase.com/docs/guides/cli/config
 
-project_id = "jike"
+project_id = "filzrurpzixnxljzrzny"
 
 [api]
 enabled = true
@@ -12,7 +12,7 @@ max_rows = 1000
 
 [db]
 port = 54322
-major_version = 15
+major_version = 17
 
 [studio]
 enabled = true
@@ -20,3 +20,28 @@ port = 54323
 
 [auth]
 enabled = true
+site_url = "http://localhost:8081"
+additional_redirect_urls = [
+  "jike://auth/callback",
+  "http://localhost:8081",
+  "http://localhost:8081/**",
+  "http://127.0.0.1:8081/**"
+]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+max_frequency = "1s"
+
+[auth.rate_limit]
+email_sent = 300
+sign_in_sign_ups = 300
+
+[auth.email.smtp]
+enabled = true
+host = "smtp.163.com"
+port = 465
+user = "manbudezhu@163.com"
+pass = "env(SMTP_PASS)"
+admin_email = "manbudezhu@163.com"
+sender_name = "集刻"
