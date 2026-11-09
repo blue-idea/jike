@@ -484,7 +484,7 @@ export function CultureMapView({
   onMapInteractingChange,
 }: CultureMapViewProps) {
   const isWeb = Platform.OS === 'web';
-  const webRef = useRef<WebView>(null);
+  const webRef = useRef<any>(null);
   const mapInteractingRef = useRef(false);
   const interactionReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [activeLayer, setActiveLayer] = useState<CultureMapLayer>(initialLayer);

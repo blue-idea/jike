@@ -100,6 +100,11 @@ export default function DiscoverScreen() {
       setHeritageFilters(prev => ({ ...prev, province: homeCatalogLocation.province, city: homeCatalogLocation.city, useAutoLocation: true }));
     }
   }, [homeCatalogLocation]);
+  const heritageDefaultLocation = useMemo(
+    () => ({ ...heritageFilters, level: ALL_LEVEL }),
+    [heritageFilters],
+  );
+
   const homeLocationLabel = useMemo(() => {
     if (!homeCatalogLocation) return null;
     if (!homeCatalogLocation.city) return homeCatalogLocation.province;
@@ -161,7 +166,7 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
+      <StatusBar barStyle="dark-content" />
       <BrandHeader
         rightElement={
           homeLocationLabel ? (
@@ -235,7 +240,7 @@ export default function DiscoverScreen() {
             {activeTab === 'heritage' && (
               <HeritageFilterPanel
                 primaryColor={Colors.primary}
-                defaultLocation={{ ...heritageFilters, level: ALL_LEVEL }}
+                defaultLocation={heritageDefaultLocation}
                 filterOptions={heritageOptions}
                 transparent
                 onApplyQuery={setHeritageFilters}

@@ -22,6 +22,14 @@ export default function LoginScreen() {
 
   const onSubmit = async () => {
     setError(null);
+    if (!email.trim()) {
+      setError('请输入邮箱地址。');
+      return;
+    }
+    if (!password) {
+      setError('请输入密码。');
+      return;
+    }
     setBusy(true);
     try {
       const { error: err } = await signIn(email, password);

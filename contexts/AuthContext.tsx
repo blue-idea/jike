@@ -12,7 +12,7 @@ import { router } from 'expo-router';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { getEmailAuthRedirectTo } from '@/lib/auth/redirectUrl';
-import { mapAuthErrorToZh } from '@/lib/auth/mapAuthError';
+import { mapAuthErrorToZh } from '@/lib/auth/authErrors';
 import { parseAuthRedirectUrl } from '@/lib/auth/parseAuthUrl';
 
 type AuthContextValue = {
@@ -75,6 +75,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (url) void applyAuthDeepLink(url);
     });
 
+    // Web 端页面直接加载时若带有 auth 回调 hash 参数，立即处理登录态回跳
+    if (typeof window !== 'undefined' && window.location?.href && window.location.hash.includes('access_token')) {
+      void applyAuthDeepLink(window.location.href);
+    }
+
     return () => {
       cancelled = true;
       subscription.unsubscribe();
@@ -84,7 +89,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-    if (error) return { error: mapAuthErrorToZh(error, 'login') };
+    if (error) {
+      if (__DEV__) {
+        console.warn('[Auth:signIn] 失败详情:', error.name, error.message, (error as { status?: number }).status, (error as { code?: string }).code);
+      }
+      return { error: mapAuthErrorToZh(error, 'login') };
+    }
     return { error: null };
   }, []);
 
@@ -94,7 +104,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
       password,
       options: { emailRedirectTo: getEmailAuthRedirectTo() },
     });
-    if (error) return { error: mapAuthErrorToZh(error, 'register') };
+    if (error) {
+      if (__DEV__) {
+        console.warn('[Auth:signUp] 失败详情:', error.name, error.message, (error as { status?: number }).status, (error as { code?: string }).code);
+      }
+      return { error: mapAuthErrorToZh(error, 'register') };
+    }
+
+    // Supabase 开启防用户枚举时，若邮箱已存在，返回 user 但 identities 为空数组
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return { error: '该邮箱已注册，请直接登录或更换邮箱。' };
+    }
+
     if (data.user && !data.session) {
       return { error: null, needsEmailConfirmation: true };
     }

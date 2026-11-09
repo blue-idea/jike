@@ -25,6 +25,10 @@ export default function RegisterScreen() {
 
   const onSubmit = async () => {
     setError(null);
+    if (!email.trim()) {
+      setError('请输入邮箱地址。');
+      return;
+    }
     if (!agreed) {
       setError('请先阅读并同意服务条款与隐私政策。');
       return;

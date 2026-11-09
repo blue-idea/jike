@@ -25,7 +25,7 @@ interface HeroCarouselProps {
 
 export function HeroCarousel({ onSlidePress }: HeroCarouselProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<any>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {

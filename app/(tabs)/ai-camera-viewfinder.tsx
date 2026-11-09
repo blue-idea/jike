@@ -52,7 +52,7 @@ export default function AiCameraViewfinderScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle="light-content" />
       
       {/* Mock Camera Preview */}
       <Image 
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'space-between',
   },
   topSection: {

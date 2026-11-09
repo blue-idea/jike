@@ -56,7 +56,7 @@ export function AiItineraryDayPager({
   onRemoveStop,
   buildStopFromCandidate,
 }: AiItineraryDayPagerProps) {
-  const pagerRef = useRef<ScrollView>(null);
+  const pagerRef = useRef<any>(null);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [pageWidth, setPageWidth] = useState(0);
 

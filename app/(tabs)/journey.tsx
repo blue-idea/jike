@@ -20,7 +20,7 @@ import { TravelJournalPanel } from '@/components/journey/TravelJournalPanel';
 export default function JourneyScreen() {
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
+      <StatusBar barStyle="dark-content" />
       <BrandHeader
         rightElement={
           <TouchableOpacity style={styles.createBtn} activeOpacity={0.8}>

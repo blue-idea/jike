@@ -45,3 +45,6 @@ artifacts/
 .claude/
 .cursor/
 .codex/
+
+# SDD 测试敏感凭据
+docs/spec/info.md

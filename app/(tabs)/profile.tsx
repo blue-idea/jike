@@ -78,7 +78,7 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -108,7 +108,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <StatusBar barStyle="dark-content" />
       <BrandHeader
         rightElement={
           <View style={styles.headerRowActions}>
