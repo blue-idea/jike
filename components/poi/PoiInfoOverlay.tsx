@@ -218,7 +218,7 @@ export function PoiInfoOverlay({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'flex-end',
   },
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8DFD0',
   },
   heroGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   distanceTag: {
     position: 'absolute',

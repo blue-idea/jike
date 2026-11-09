@@ -197,7 +197,7 @@ export default function HeatmapTrendsScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <StatusBar barStyle="dark-content" />
       <CommonTopBar title="热力与人流趋势" showBack />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>

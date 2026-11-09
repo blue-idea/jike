@@ -2,19 +2,20 @@
  * lib/location/locationService.ts
  *
  * 定位服务：获取位置、权限状态、距离计算
- * EARS-1 覆盖：获取位置后查询附近 POI
- * EARS-2 覆盖：距离排序展示
- * EARS-PERM：定位权限请求
+ * 架构：采用 Expo 新版 expo-location/next 提供商机制（Fallback: GMS -> Android原生），
+ * 彻底解决中国区无 Google Play 服务的 Android 设备（如小米等）与 Pixel 设备的定位问题。
+ * EARS 覆盖：
+ * - REQ-002-AC-001: Android 无 GMS 自动回退 Android 原生 LocationManager 定位
+ * - REQ-002-AC-002: WGS-84 国内坐标自动转换为 GCJ-02，境外保持 WGS-84
+ * - REQ-002-AC-003: 硬件定位全失败时降级高德 IP 粗定位
  */
 import { Platform } from 'react-native';
-import type {
-  Coordinates as GaodeCoordinates,
-  PermissionStatus as GaodePermissionStatus,
-  ReGeocode as GaodeReGeocode,
-} from 'expo-gaode-map';
+import { requireOptionalNativeModule } from 'expo';
 import { appendLocationDiagnostic } from './locationDiagnostics';
 
-type ExpoLocationModule = {
+export type LocationProviderRef = { name: string; providers?: unknown[] };
+
+export type ExpoLocationNextModule = {
   requestForegroundPermissionsAsync: () => Promise<{ status: string }>;
   getForegroundPermissionsAsync: () => Promise<{ status: string }>;
   getCurrentPositionAsync: (opts: { accuracy: number }) => Promise<{
@@ -31,66 +32,53 @@ type ExpoLocationModule = {
       district?: string | null;
     }[]
   >;
-  Accuracy: { Balanced: number };
-};
-
-type GaodeLocationModule = {
-  checkLocationPermission: () => Promise<GaodePermissionStatus>;
-  requestLocationPermission: () => Promise<GaodePermissionStatus>;
-  getCurrentLocation: () => Promise<GaodeCoordinates | GaodeReGeocode>;
-  getPrivacyStatus: () => {
-    isReady: boolean;
+  Accuracy?: { Balanced: number; High?: number };
+  LocationProvider?: {
+    Gms?: () => LocationProviderRef;
+    Android?: () => LocationProviderRef;
+    Fallback?: (providers: LocationProviderRef[]) => LocationProviderRef;
   };
-  setPrivacyConfig: (config: {
-    hasShow: boolean;
-    hasContainsPrivacy: boolean;
-    hasAgree: boolean;
-    privacyVersion?: string;
-  }) => void;
-  setLocatingWithReGeocode: (isReGeocode: boolean) => void;
-  setGeoLanguage: (language: string) => void;
-  setOnceLocation: (isOnceLocation: boolean) => void;
-  setOnceLocationLatest: (onceLocationLatest: boolean) => void;
-  setGpsFirst: (gpsFirst: boolean) => void;
-  setWifiScan: (wifiScan: boolean) => void;
-  setLocationCacheEnable: (locationCacheEnable: boolean) => void;
-  setHttpTimeOut: (httpTimeOut: number) => void;
-  setLocationTimeout: (timeout: number) => void;
-  setReGeocodeTimeout: (timeout: number) => void;
-  isNativeSDKConfigured: () => boolean;
-  setLocationMode?: (mode: number) => void;
-  setDesiredAccuracy?: (accuracy: number) => void;
+  setLocationProvider?: (provider: LocationProviderRef) => void;
+  getSelectedLocationProviderName?: () => string;
 };
 
-// expo-location 动态导入（允许项目未安装时开发预览）
-let expoLocationModule: ExpoLocationModule | null = null;
-async function loadLocation(): Promise<ExpoLocationModule | null> {
+/**
+ * 检查当前原生运行时是否可用 LocationModuleNext
+ * （expo-location/next 依赖此原生模块；Expo Go 及未构建新原生模块的环境仅内置标准 ExpoLocation）
+ */
+function hasLocationModuleNext(): boolean {
+  if (Platform.OS === 'web') return false;
+  try {
+    return Boolean(requireOptionalNativeModule('LocationModuleNext'));
+  } catch {
+    return false;
+  }
+}
+
+// 动态导入 expo-location/next 或回退到 expo-location
+let expoLocationModule: ExpoLocationNextModule | null = null;
+async function loadLocation(): Promise<ExpoLocationNextModule | null> {
   if (expoLocationModule === null) {
-    try {
-      const mod = require('expo-location') as ExpoLocationModule;
-      expoLocationModule = mod;
-    } catch {
-      expoLocationModule = null;
+    if (hasLocationModuleNext()) {
+      try {
+        // 优先加载支持定位提供商机制的 expo-location/next（仅在原生模块实际存在时加载）
+        const mod = require('expo-location/next') as ExpoLocationNextModule;
+        expoLocationModule = mod;
+      } catch {
+        // 异常时回退到标准模块
+      }
+    }
+
+    if (!expoLocationModule) {
+      try {
+        const mod = require('expo-location') as ExpoLocationNextModule;
+        expoLocationModule = mod;
+      } catch {
+        expoLocationModule = null;
+      }
     }
   }
   return expoLocationModule;
-}
-
-let gaodeLocationModule: GaodeLocationModule | null = null;
-async function loadGaodeLocation(): Promise<GaodeLocationModule | null> {
-  if (Platform.OS === 'web') return null;
-  if (gaodeLocationModule === null) {
-    try {
-      const mod = require('expo-gaode-map') as {
-        default?: GaodeLocationModule;
-        ExpoGaodeMapModule?: GaodeLocationModule;
-      };
-      gaodeLocationModule = mod.default ?? mod.ExpoGaodeMapModule ?? null;
-    } catch {
-      gaodeLocationModule = null;
-    }
-  }
-  return gaodeLocationModule;
 }
 
 export type LocationStatus =
@@ -110,7 +98,8 @@ export interface LocationResult {
   status: LocationStatus;
   coords: LocationCoords | null;
   accuracy: number | null;
-  source?: 'gaode' | 'expo-location' | 'web' | 'amap-ip';
+  source?: 'expo-location-next' | 'expo-location' | 'web' | 'amap-ip';
+  providerName?: string;
   coordSystem?: CoordSystem;
   error?: string;
 }
@@ -127,15 +116,6 @@ export interface ReverseGeocodeOptions {
   source?: LocationResult['source'];
   coordSystem?: CoordSystem;
 }
-
-const GAODE_PRIVACY_VERSION = 'jike-location-v1';
-const GAODE_ANDROID_HIGH_ACCURACY_MODE = 1;
-const GAODE_IOS_BEST_ACCURACY = 1;
-
-let lastGaodeAddress: {
-  coords: LocationCoords;
-  address: LocationAddress;
-} | null = null;
 
 function logLocationInfo(event: string, detail: Record<string, unknown> = {}) {
   void appendLocationDiagnostic('info', event, detail);
@@ -159,26 +139,6 @@ function getAmapWebServiceKey(): string | null {
   return key && key.length > 0 ? key : null;
 }
 
-function isNativeModuleUnavailableError(message: string): boolean {
-  const text = message.toLowerCase();
-  return (
-    text.includes('native module') ||
-    text.includes('not available') ||
-    text.includes('unavailable') ||
-    text.includes('expo go')
-  );
-}
-
-function isGooglePlayServiceUnavailableError(message: string): boolean {
-  const text = message.toLowerCase();
-  return (
-    text.includes('locationservices.api') ||
-    text.includes('service_invalid') ||
-    text.includes('google play services') ||
-    text.includes('fused location provider')
-  );
-}
-
 function parseCenterFromAmapRectangle(
   rectangle: string,
 ): LocationCoords | null {
@@ -199,12 +159,12 @@ function parseCenterFromAmapRectangle(
   };
 }
 
-// GCJ-02 / WGS-84 转换（中国大陆加偏逻辑）
+// GCJ-02 / WGS-84 转换（中国大陆火星坐标加偏逻辑）
 const GCJ_PI = Math.PI;
 const GCJ_A = 6378245.0;
 const GCJ_EE = 0.00669342162296594323;
 
-function outOfChina(lat: number, lng: number): boolean {
+export function outOfChina(lat: number, lng: number): boolean {
   return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
 }
 
@@ -274,11 +234,6 @@ export function wgs84ToGcj02(coords: LocationCoords): LocationCoords {
   return { lat: lat + dLat, lng: lng + dLng };
 }
 
-function resolveGaodeCoordSystem(location: GaodeCoordinates | GaodeReGeocode): CoordSystem {
-  const coordType = (location as Partial<GaodeReGeocode>).coordType;
-  return coordType === 'WGS84' ? 'WGS84' : 'GCJ02';
-}
-
 function toAmapCoordSystem(coords: LocationCoords, coordSystem: CoordSystem): LocationCoords {
   if (coordSystem === 'GCJ02') return coords;
   return wgs84ToGcj02(coords);
@@ -308,7 +263,7 @@ async function getApproxLocationByAmapIp(): Promise<LocationResult | null> {
       source: 'amap-ip',
       coordSystem: 'GCJ02',
       error:
-        '当前设备缺少 Google Play 服务，已降级为高德 IP 定位（城市级精度）。',
+        '当前硬件定位不可用，已降级为高德 IP 定位（城市级精度）。',
     };
     logLocationInfo('amap-ip-location-success', { coords });
     return result;
@@ -330,21 +285,23 @@ function getWebPosition(): Promise<LocationResult> {
         status: 'unavailable',
         coords: null,
         accuracy: null,
-        error: '当前环境不支持地理定位',
+        error: 'Geolocation is not supported in the current environment',
       });
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const rawCoords = {
+          lng: position.coords.longitude,
+          lat: position.coords.latitude,
+        };
+        const isChina = !outOfChina(rawCoords.lat, rawCoords.lng);
         resolve({
           status: 'granted',
-          coords: {
-            lng: position.coords.longitude,
-            lat: position.coords.latitude,
-          },
+          coords: isChina ? wgs84ToGcj02(rawCoords) : rawCoords,
           source: 'web',
-          coordSystem: 'WGS84',
+          coordSystem: isChina ? 'GCJ02' : 'WGS84',
           accuracy:
             typeof position.coords.accuracy === 'number' &&
             Number.isFinite(position.coords.accuracy)
@@ -358,7 +315,7 @@ function getWebPosition(): Promise<LocationResult> {
             status: 'denied',
             coords: null,
             accuracy: null,
-            error: '定位权限未授权',
+            error: 'Location permission denied',
           });
           return;
         }
@@ -366,7 +323,7 @@ function getWebPosition(): Promise<LocationResult> {
           status: 'unavailable',
           coords: null,
           accuracy: null,
-          error: error.message || '无法获取位置',
+          error: error.message || 'Unable to retrieve location',
         });
       },
       {
@@ -378,260 +335,97 @@ function getWebPosition(): Promise<LocationResult> {
   });
 }
 
-function normalizeGaodePermissionStatus(
-  permission: GaodePermissionStatus,
-): LocationStatus {
-  if (permission.granted) return 'granted';
-  if (permission.isPermanentlyDenied) return 'blocked';
-  if (permission.status === 'denied') return 'denied';
-  return 'denied';
-}
-
-function addressFromGaodeLocation(
-  location: GaodeCoordinates | GaodeReGeocode,
-): LocationAddress | null {
-  const reGeocode = location as Partial<GaodeReGeocode>;
-  const province =
-    typeof reGeocode.province === 'string' ? reGeocode.province.trim() : '';
-  const city = typeof reGeocode.city === 'string' ? reGeocode.city.trim() : '';
-  const district =
-    typeof reGeocode.district === 'string' ? reGeocode.district.trim() : '';
-  if (!province && !city && !district) return null;
-  return {
-    province: province || null,
-    city: city || null,
-    district: district || null,
-  };
-}
-
-function shouldUseCachedGaodeAddress(coords: LocationCoords): boolean {
-  if (!lastGaodeAddress) return false;
-  return (
-    calcDistance(
-      coords.lat,
-      coords.lng,
-      lastGaodeAddress.coords.lat,
-      lastGaodeAddress.coords.lng,
-    ) <= 50
-  );
-}
-
-async function prepareGaodeLocationModule(): Promise<GaodeLocationModule | null> {
-  const gaode = await loadGaodeLocation();
-  if (!gaode) return null;
-
-  try {
-    const privacyStatus = gaode.getPrivacyStatus();
-    if (!privacyStatus.isReady) {
-      gaode.setPrivacyConfig({
-        hasShow: true,
-        hasContainsPrivacy: true,
-        hasAgree: true,
-        privacyVersion: GAODE_PRIVACY_VERSION,
-      });
-    }
-
-    if (!gaode.isNativeSDKConfigured()) {
-      logLocationWarning('gaode-native-key-missing');
-      return null;
-    }
-
-    gaode.setLocatingWithReGeocode(true);
-    gaode.setGeoLanguage('ZH');
-    gaode.setOnceLocation(true);
-    gaode.setOnceLocationLatest(true);
-    gaode.setGpsFirst(true);
-    gaode.setWifiScan(true);
-    gaode.setLocationCacheEnable(false);
-    gaode.setHttpTimeOut(10000);
-    gaode.setLocationTimeout(10);
-    gaode.setReGeocodeTimeout(5);
-    gaode.setLocationMode?.(GAODE_ANDROID_HIGH_ACCURACY_MODE);
-    gaode.setDesiredAccuracy?.(GAODE_IOS_BEST_ACCURACY);
-    return gaode;
-  } catch (e) {
-    const message = e instanceof Error ? e.message : '高德定位模块初始化失败';
-    logLocationWarning('gaode-prepare-failed', { message });
-    return null;
-  }
-}
-
-async function requestGaodeLocationPermission(): Promise<LocationStatus | null> {
-  const gaode = await prepareGaodeLocationModule();
-  if (!gaode) return null;
-
-  try {
-    const permission = await gaode.requestLocationPermission();
-    const status = normalizeGaodePermissionStatus(permission);
-    logLocationInfo('gaode-permission-requested', {
-      status,
-      granted: permission.granted,
-      fineLocation: permission.fineLocation,
-      coarseLocation: permission.coarseLocation,
-      isPermanentlyDenied: permission.isPermanentlyDenied,
-    });
-    return status;
-  } catch (e) {
-    const message = e instanceof Error ? e.message : '高德定位权限请求失败';
-    logLocationWarning('gaode-permission-failed', { message });
-    return isNativeModuleUnavailableError(message) ? null : 'unavailable';
-  }
-}
-
-async function getCurrentLocationByGaode(): Promise<LocationResult | null> {
-  const gaode = await prepareGaodeLocationModule();
-  if (!gaode) return null;
-
-  try {
-    const permission = await gaode.checkLocationPermission();
-    const status = normalizeGaodePermissionStatus(permission);
-    if (status !== 'granted') {
-      return {
-        status,
-        coords: null,
-        accuracy: null,
-        source: 'gaode',
-        error: '定位权限未授权',
-      };
-    }
-
-    const location = await gaode.getCurrentLocation();
-    if (
-      !Number.isFinite(location.longitude) ||
-      !Number.isFinite(location.latitude)
-    ) {
-      return {
-        status: 'unavailable',
-        coords: null,
-        accuracy: null,
-        source: 'gaode',
-        error: '无法获取位置',
-      };
-    }
-
-    const coords = { lng: location.longitude, lat: location.latitude };
-    const address = addressFromGaodeLocation(location);
-    const coordSystem = resolveGaodeCoordSystem(location);
-    if (address) {
-      lastGaodeAddress = { coords, address };
-    }
-
-    logLocationInfo('gaode-location-success', {
-      lng: coords.lng,
-      lat: coords.lat,
-      accuracy: location.accuracy,
-      hasAddress: Boolean(address),
-      coordSystem,
-    });
-
-    return {
-      status: 'granted',
-      coords,
-      accuracy: Number.isFinite(location.accuracy) ? location.accuracy : null,
-      source: 'gaode',
-      coordSystem,
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : '高德定位失败';
-    logLocationWarning('gaode-location-failed', { message });
-    return isNativeModuleUnavailableError(message)
-      ? null
-      : {
-          status: 'unavailable',
-          coords: null,
-          accuracy: null,
-          source: 'gaode',
-          error: message,
-        };
-  }
-}
-
 async function reverseGeocodeByAmap(
   coords: LocationCoords,
-  coordSystem: CoordSystem,
+  coordSystem: CoordSystem = 'WGS84',
 ): Promise<LocationAddress | null> {
   const key = getAmapWebServiceKey();
   if (!key) return null;
-  const amapCoords = toAmapCoordSystem(coords, coordSystem);
 
-  const url =
-    `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(key)}` +
-    `&location=${amapCoords.lng},${amapCoords.lat}&extensions=base&batch=false`;
+  const targetCoords = toAmapCoordSystem(coords, coordSystem);
+  const locationParam = `${targetCoords.lng.toFixed(6)},${targetCoords.lat.toFixed(6)}`;
+  const url = `https://restapi.amap.com/v3/geocode/regeo?key=${encodeURIComponent(
+    key,
+  )}&location=${locationParam}&extensions=base&output=json`;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const json = (await response.json()) as {
       status?: string;
       regeocode?: {
         addressComponent?: {
           province?: string;
-          city?: string | string[];
+          city?: string | [];
           district?: string;
         };
       };
     };
-    if (json.status !== '1') return null;
-    const comp = json.regeocode?.addressComponent;
-    if (!comp) return null;
-    const cityFromAmap = Array.isArray(comp.city) ? comp.city[0] : comp.city;
-    const address = {
-      province: comp.province?.trim() ?? null,
-      city: cityFromAmap?.trim() ?? null,
-      district: comp.district?.trim() ?? null,
+
+    if (json.status !== '1' || !json.regeocode?.addressComponent) return null;
+    const comp = json.regeocode.addressComponent;
+    const province =
+      typeof comp.province === 'string' && comp.province.trim().length > 0
+        ? comp.province.trim()
+        : null;
+    const city =
+      typeof comp.city === 'string' && comp.city.trim().length > 0
+        ? comp.city.trim()
+        : null;
+    const district =
+      typeof comp.district === 'string' && comp.district.trim().length > 0
+        ? comp.district.trim()
+        : null;
+
+    const address: LocationAddress = {
+      province,
+      city: city ?? province,
+      district,
     };
     logLocationInfo('amap-regeo-success', {
       inputCoords: coords,
-      inputCoordSystem: coordSystem,
-      amapCoords,
+      targetCoords,
+      coordSystem,
       address,
     });
     return address;
-  } catch {
+  } catch (e) {
+    logLocationWarning('amap-regeo-failed', {
+      error: e instanceof Error ? e.message : String(e),
+      coords,
+    });
     return null;
   }
 }
 
-/** 请求定位权限（Web 端将触发一次浏览器授权） */
-export async function requestLocationPermission(): Promise<LocationStatus> {
-  if (Platform.OS === 'web') {
-    const webResult = await getWebPosition();
-    return webResult.status;
-  }
-
-  const gaodeStatus = await requestGaodeLocationPermission();
-  if (gaodeStatus) return gaodeStatus;
-
-  const expoLocation = await loadLocation();
-  if (!expoLocation) {
-    return 'unavailable';
-  }
-
-  try {
-    const { status } = await expoLocation.requestForegroundPermissionsAsync();
-    return mapPermissionStatus(status);
-  } catch {
-    return 'unavailable';
-  }
+export interface ResolveLocationOptions {
+  platform?: string;
+  locationModule?: ExpoLocationNextModule | null;
+  mockIpFallback?: () => Promise<LocationResult | null>;
 }
 
-/** 获取当前位置 */
-export async function getCurrentLocation(): Promise<LocationResult> {
-  if (Platform.OS === 'web') {
+/**
+ * 核心定位解析器（基于 expo-location/next 提供商架构，支持外部注入用于测试与诊断）
+ */
+export async function resolveLocationWithProvider(
+  options?: ResolveLocationOptions,
+): Promise<LocationResult> {
+  const currentPlatform = options?.platform ?? Platform.OS;
+
+  if (currentPlatform === 'web') {
     return getWebPosition();
   }
 
-  const gaodeResult = await getCurrentLocationByGaode();
-  if (gaodeResult?.coords) return gaodeResult;
-  if (gaodeResult && gaodeResult.status !== 'unavailable') return gaodeResult;
+  const expoLocation = options?.locationModule !== undefined
+    ? options.locationModule
+    : await loadLocation();
 
-  const expoLocation = await loadLocation();
   if (!expoLocation) {
     return {
       status: 'unavailable',
       coords: null,
       accuracy: null,
-      error: 'expo-location 未安装',
+      error: 'expo-location is not installed',
     };
   }
 
@@ -642,45 +436,111 @@ export async function getCurrentLocation(): Promise<LocationResult> {
         status: mapPermissionStatus(status),
         coords: null,
         accuracy: null,
-        error: '定位权限未授权',
+        error: 'Location permission denied',
       };
     }
 
-    const location = await expoLocation.getCurrentPositionAsync({
-      accuracy: expoLocation.Accuracy.Balanced,
-    });
-    if (!location) {
+    // 在 Android 平台配置 expo-location/next 的 Fallback 提供商（Gms 优先 -> 回退 Android 原生）
+    if (currentPlatform === 'android' && expoLocation.LocationProvider && expoLocation.setLocationProvider) {
+      try {
+        let fallbackProvider: LocationProviderRef | null = null;
+        if (typeof expoLocation.LocationProvider.Fallback === 'function') {
+          const providers: LocationProviderRef[] = [];
+          if (typeof expoLocation.LocationProvider.Gms === 'function') {
+            try {
+              const gms = expoLocation.LocationProvider.Gms();
+              if (gms) providers.push(gms);
+            } catch {
+              // 当前设备不支持 GMS 时忽略抛错
+            }
+          }
+          if (typeof expoLocation.LocationProvider.Android === 'function') {
+            try {
+              const android = expoLocation.LocationProvider.Android();
+              if (android) providers.push(android);
+            } catch {
+              // 忽略
+            }
+          }
+          if (providers.length > 0) {
+            fallbackProvider = expoLocation.LocationProvider.Fallback(providers);
+          }
+        } else if (typeof expoLocation.LocationProvider.Android === 'function') {
+          fallbackProvider = expoLocation.LocationProvider.Android();
+        }
+
+        if (fallbackProvider) {
+          expoLocation.setLocationProvider(fallbackProvider);
+        }
+      } catch (err) {
+        logLocationWarning('set-location-provider-warning', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const accuracy = expoLocation.Accuracy?.Balanced ?? 3;
+    const location = await expoLocation.getCurrentPositionAsync({ accuracy });
+
+    if (!location?.coords) {
       return {
         status: 'unavailable',
         coords: null,
         accuracy: null,
-        error: '无法获取位置',
+        error: 'Unable to retrieve coordinates',
       };
     }
-    return {
+
+    let providerName: string | undefined;
+    if (typeof expoLocation.getSelectedLocationProviderName === 'function') {
+      try {
+        providerName = expoLocation.getSelectedLocationProviderName();
+      } catch {
+        providerName = undefined;
+      }
+    }
+
+    const rawCoords: LocationCoords = {
+      lng: location.coords.longitude,
+      lat: location.coords.latitude,
+    };
+    const isChina = !outOfChina(rawCoords.lat, rawCoords.lng);
+    const finalCoords = isChina ? wgs84ToGcj02(rawCoords) : rawCoords;
+    const coordSystem: CoordSystem = isChina ? 'GCJ02' : 'WGS84';
+
+    const source = expoLocation.LocationProvider ? 'expo-location-next' : 'expo-location';
+
+    const result: LocationResult = {
       status: 'granted',
-      coords: { lng: location.coords.longitude, lat: location.coords.latitude },
-      source: 'expo-location',
-      coordSystem: 'WGS84',
+      coords: finalCoords,
+      source,
+      providerName,
+      coordSystem,
       accuracy:
         typeof location.coords.accuracy === 'number' &&
         Number.isFinite(location.coords.accuracy)
           ? location.coords.accuracy
           : null,
     };
+
+    logLocationInfo('location-resolved', {
+      source,
+      providerName,
+      coordSystem,
+      rawCoords,
+      finalCoords,
+    });
+
+    return result;
   } catch (e) {
-    const message = e instanceof Error ? e.message : '位置获取失败';
-    if (isGooglePlayServiceUnavailableError(message)) {
-      const approx = await getApproxLocationByAmapIp();
-      if (approx) return approx;
-      return {
-        status: 'unavailable',
-        coords: null,
-        accuracy: null,
-        error:
-          '当前设备缺少 Google Play 服务，且高德定位兜底不可用。请配置 EXPO_PUBLIC_AMAP_WEB_SERVICE_KEY（高德 Web 服务 Key）或改用手动筛选。',
-      };
-    }
+    const message = e instanceof Error ? e.message : 'Failed to retrieve location';
+    logLocationWarning('expo-location-failed', { error: message });
+
+    // 硬件定位全部失败时，尝试降级为高德 IP 粗定位
+    const ipFallback = options?.mockIpFallback ?? getApproxLocationByAmapIp;
+    const approx = await ipFallback();
+    if (approx) return approx;
+
     return {
       status: 'unavailable',
       coords: null,
@@ -688,6 +548,45 @@ export async function getCurrentLocation(): Promise<LocationResult> {
       error: message,
     };
   }
+}
+
+/**
+ * 快速检查当前定位权限状态（只读，不触发系统弹窗）
+ */
+export async function getLocationPermissionStatus(): Promise<LocationStatus> {
+  if (Platform.OS === 'web') return 'granted';
+  const expoLocation = await loadLocation();
+  if (!expoLocation) return 'unavailable';
+
+  try {
+    const { status } = await expoLocation.getForegroundPermissionsAsync();
+    return mapPermissionStatus(status);
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
+ * 主动请求定位权限
+ */
+export async function requestLocationPermission(): Promise<LocationStatus> {
+  if (Platform.OS === 'web') return 'granted';
+  const expoLocation = await loadLocation();
+  if (!expoLocation) return 'unavailable';
+
+  try {
+    const { status } = await expoLocation.requestForegroundPermissionsAsync();
+    return mapPermissionStatus(status);
+  } catch {
+    return 'unavailable';
+  }
+}
+
+/**
+ * 单次定位：使用 expo-location/next 提供商机制（优先 Gms，自动回退 Android 原生 LocationManager）
+ */
+export async function getCurrentLocation(): Promise<LocationResult> {
+  return resolveLocationWithProvider();
 }
 
 /**
@@ -699,24 +598,25 @@ export async function getCurrentLocationWithPermission(): Promise<LocationResult
 
   const shouldRequestPermission =
     firstTry.status === 'denied' ||
-    firstTry.status === 'blocked' ||
-    firstTry.status === 'idle';
+    firstTry.status === 'idle' ||
+    firstTry.status === 'unavailable';
+
   if (!shouldRequestPermission) return firstTry;
 
-  const permission = await requestLocationPermission();
-  if (permission !== 'granted') {
+  const permStatus = await requestLocationPermission();
+  if (permStatus !== 'granted') {
     return {
-      status: permission,
+      status: permStatus,
       coords: null,
       accuracy: null,
-      error: '定位权限未授权',
+      error: 'Location permission denied',
     };
   }
 
   return getCurrentLocation();
 }
 
-/** 根据经纬度反查省市区（优先 expo-location，失败后回退高德逆地理编码） */
+/** 根据经纬度反查省市区（优先高德逆地理编码，确保 GCJ-02 坐标精确匹配） */
 export async function reverseGeocodeLocation(
   coords: LocationCoords,
   options: ReverseGeocodeOptions = {},
@@ -724,17 +624,12 @@ export async function reverseGeocodeLocation(
   const expoLocation = await loadLocation();
   const source = options.source;
   const coordSystem = options.coordSystem ?? 'WGS84';
-  if (shouldUseCachedGaodeAddress(coords)) {
-    logLocationInfo('reverse-geocode-hit-gaode-cache', { coords });
-    return lastGaodeAddress?.address ?? null;
-  }
 
-  // 在中国场景优先走高德逆地理，避免 WGS84/GCJ02 混用导致位置漂移。
-  // source=gaode/amap-ip 时，优先级更高；source=expo-location 时会先做 WGS84->GCJ02 转换后再请求高德。
+  // 在中国境内优先走高德逆地理，确保坐标与高德地图数据完全对齐
   const amapFirst = await reverseGeocodeByAmap(coords, coordSystem);
   if (amapFirst) return amapFirst;
 
-  if (source !== 'gaode' && source !== 'amap-ip' && expoLocation?.reverseGeocodeAsync && Platform.OS !== 'web') {
+  if (source !== 'amap-ip' && expoLocation?.reverseGeocodeAsync && Platform.OS !== 'web') {
     try {
       const result = await expoLocation.reverseGeocodeAsync({
         longitude: coords.lng,
@@ -755,7 +650,7 @@ export async function reverseGeocodeLocation(
         return address;
       }
     } catch {
-      // ignore and fallback
+      // 降级忽略
     }
   }
   return null;

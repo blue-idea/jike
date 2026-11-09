@@ -279,12 +279,18 @@ function useDirectoryFavorites(
   const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(new Set());
   const [favoriteBusyKeys, setFavoriteBusyKeys] = useState<Set<string>>(new Set());
 
+  // 生成稳定的依赖标识，避免每次父组件 render 传入新数组时触发无效的 useEffect 循环
+  const itemsKey = items.map((item) => item.id).filter(Boolean).join(',');
+
   useEffect(() => {
     let cancelled = false;
-    const uniqueItems = Array.from(new Map(items.map((item) => [item.id, item])).values());
+    const uniqueItems = Array.from(new Map(items.map((item) => [item.id, item])).values()).filter(
+      (item) => Boolean(item.id),
+    );
 
     if (uniqueItems.length === 0) {
-      setFavoriteKeys(new Set());
+      // 当没有条目时，若当前为空集合则保留原引用，避免触发无意义重渲染循环
+      setFavoriteKeys((prev) => (prev.size === 0 ? prev : new Set()));
       return () => {
         cancelled = true;
       };
@@ -299,10 +305,17 @@ function useDirectoryFavorites(
       );
 
       if (cancelled) return;
-      setFavoriteKeys(() => {
+      setFavoriteKeys((prev) => {
         const next = new Set<string>();
         for (const check of checks) {
           if (check.active) next.add(check.key);
+        }
+        // 如果内容完全相同，保留原 Set 引用，避免 React 触发无意义重渲染
+        if (
+          prev.size === next.size &&
+          Array.from(prev).every((key) => next.has(key))
+        ) {
+          return prev;
         }
         return next;
       });
@@ -311,7 +324,7 @@ function useDirectoryFavorites(
     return () => {
       cancelled = true;
     };
-  }, [items, poiType]);
+  }, [itemsKey, poiType]);
 
   const isFavorite = useCallback(
     (poiId: string) => favoriteKeys.has(buildFavoriteKey(poiType, poiId)),
@@ -518,10 +531,12 @@ export function ScenicSearchContent({
   }, [externalFilters]);
 
   useEffect(() => {
-    setActiveScenicFilters(initialScenicFilters);
-    setScenicPage(1);
-    setHasMoreScenic(true);
-  }, [initialScenicFilters]);
+    if (!externalFilters) {
+      setActiveScenicFilters(initialScenicFilters);
+      setScenicPage(1);
+      setHasMoreScenic(true);
+    }
+  }, [externalFilters, initialScenicFilters]);
 
   useEffect(() => {
     setScenicPage(1);
@@ -555,9 +570,13 @@ export function ScenicSearchContent({
 
   const hero = displayedScenicResults[0];
   const scenicCards = displayedScenicResults.slice(1);
+  const favoriteItems = useMemo(
+    () => scenicResults.map((item) => ({ id: item.id, title: item.title })),
+    [scenicResults],
+  );
   const { isFavorite, isBusy, toggleFavorite } = useDirectoryFavorites(
     'scenic',
-    scenicResults.map((item) => ({ id: item.id, title: item.title })),
+    favoriteItems,
   );
   const handleScenicNavigate = useCallback(async (item: ScenicFeature) => {
     const destination = buildDestinationPoint(item);
@@ -828,7 +847,6 @@ export function ScenicSearchScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={stylesVars.heritageBg}
       />
       <TopBar title="A级景点搜索" />
       <ScrollView
@@ -971,10 +989,12 @@ export function HeritageDirectoryContent({
   }, [loadHeritageFilterOptions]);
 
   useEffect(() => {
-    setActiveHeritageFilters(initialHeritageFilters);
-    setHeritagePage(1);
-    setHasMoreHeritage(true);
-  }, [initialHeritageFilters]);
+    if (!externalFilters) {
+      setActiveHeritageFilters(initialHeritageFilters);
+      setHeritagePage(1);
+      setHasMoreHeritage(true);
+    }
+  }, [externalFilters, initialHeritageFilters]);
 
   useEffect(() => {
     setHeritagePage(1);
@@ -1006,9 +1026,14 @@ export function HeritageDirectoryContent({
     [distanceSortCenter, heritageResults, sortMode],
   );
 
+  const favoriteItems = useMemo(
+    () => displayedHeritageResults.map((item) => ({ id: item.id, title: item.title })),
+    [displayedHeritageResults],
+  );
+
   const { isFavorite, isBusy, toggleFavorite } = useDirectoryFavorites(
     'heritage',
-    displayedHeritageResults.map((item) => ({ id: item.id, title: item.title })),
+    favoriteItems,
   );
 
   const handleHeritageNavigate = useCallback(async (item: MuseumCardItem) => {
@@ -1185,7 +1210,6 @@ export function HeritageDirectoryScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={stylesVars.heritageBg}
       />
       <TopBar title="重点文保名录" />
       <ScrollView
@@ -1299,10 +1323,12 @@ export function MuseumDirectoryContent({
   }, [externalFilters]);
 
   useEffect(() => {
-    setActiveMuseumFilters(initialMuseumFilters);
-    setMuseumPage(1);
-    setHasMoreMuseum(true);
-  }, [initialMuseumFilters]);
+    if (!externalFilters) {
+      setActiveMuseumFilters(initialMuseumFilters);
+      setMuseumPage(1);
+      setHasMoreMuseum(true);
+    }
+  }, [externalFilters, initialMuseumFilters]);
 
   useEffect(() => {
     setMuseumPage(1);
@@ -1334,9 +1360,14 @@ export function MuseumDirectoryContent({
     [distanceSortCenter, museumResults, sortMode],
   );
 
+  const favoriteItems = useMemo(
+    () => displayedMuseumResults.map((item) => ({ id: item.id, title: item.title })),
+    [displayedMuseumResults],
+  );
+
   const { isFavorite, isBusy, toggleFavorite } = useDirectoryFavorites(
     'museum',
-    displayedMuseumResults.map((item) => ({ id: item.id, title: item.title })),
+    favoriteItems,
   );
 
   const handleMuseumNavigate = useCallback(async (item: MuseumCardItem) => {
@@ -1513,7 +1544,6 @@ export function MuseumDirectoryScreen() {
     <View style={styles.screen}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={stylesVars.heritageBg}
       />
       <TopBar title="博物馆名录" />
       <ScrollView

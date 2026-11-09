@@ -156,7 +156,7 @@ export default function CollectionScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FDF9EF" />
+      <StatusBar barStyle="dark-content" />
       <BrandHeader />
 
       <ScrollView

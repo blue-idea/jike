@@ -308,10 +308,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   relatedImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   relatedGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   relatedName: {
     color: Colors.white,

@@ -326,7 +326,7 @@ const modalStyles = StyleSheet.create({
     height: '100%',
   },
   inlineAiHeroMask: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   inlineAiHeroTextWrap: {
     position: 'absolute',

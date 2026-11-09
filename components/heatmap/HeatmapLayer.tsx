@@ -175,7 +175,7 @@ function buildHeatmapHtml(
 }
 
 export function HeatmapLayer({ center, mode, visible, onLayerError }: HeatmapLayerProps) {
-  const webRef = useRef<WebView>(null);
+  const webRef = useRef<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const amapKey = process.env.EXPO_PUBLIC_AMAP_KEY ?? '';
 
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
   wrap: { height: 220, borderRadius: 16, overflow: 'hidden', backgroundColor: '#E8DFD0' },
   web: { height: 220, backgroundColor: 'transparent' },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(247,243,236,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
